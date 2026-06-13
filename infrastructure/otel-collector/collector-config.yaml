@@ -1,0 +1,58 @@
+# Canonical OTel Collector pipeline (OBS2-01 / Phase 08-01).
+# Single source of truth — inlined by infrastructure/k8s/otel-collector-configmap.yaml in plan 08-04.
+# Service hostnames (tempo, prometheus) match docker-compose service names; k8s ConfigMap rewrites
+# them to in-cluster *.svc DNS in 08-04. otelcol-contrib 0.152.x schema.
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+    resource_to_telemetry_conversion:
+      enabled: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      exporters: [otlp/tempo]
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+    metrics:
+      exporters: [prometheusremotewrite]
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+  telemetry:
+    logs: { level: info }
+    metrics: { address: 0.0.0.0:8888 }

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: k6-enterprise
+description: k6 Enterprise Load Testing Framework — Kubernetes deployment chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - k6
+  - load-testing
+  - performance
+  - k6-operator
+maintainers:
+  - name: Platform Team
+home: https://github.com/your-org/k6-enterprise-framework
+sources:
+  - https://github.com/your-org/k6-enterprise-framework
+dependencies: []

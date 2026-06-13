@@ -1,0 +1,18 @@
+{
+  "name": "rampup",
+  "description": "Gradual ramp-up — increases load incrementally to find stable operating point",
+  "stages": [
+    { "duration": "2m", "target": 10  },
+    { "duration": "2m", "target": 20  },
+    { "duration": "2m", "target": 30  },
+    { "duration": "2m", "target": 40  },
+    { "duration": "2m", "target": 50  },
+    { "duration": "3m", "target": 0   }
+  ],
+  "thresholds": {
+    "http_req_duration": ["p(95)<1500"],
+    "http_req_failed": ["rate<0.10"],
+    "checks": ["rate>=0.90"]
+  },
+  "maxDuration": "20m"
+}

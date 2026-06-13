@@ -1,0 +1,16 @@
+{
+  "name": "throughput-high",
+  "description": "High constant throughput (100 req/s) — arrival-rate open model",
+  "executor": "constant-arrival-rate",
+  "rate": 100,
+  "timeUnit": "1s",
+  "duration": "5m",
+  "preAllocatedVUs": 120,
+  "maxVUs": 300,
+  "thresholds": {
+    "http_req_duration": ["p(95)<1000", "p(99)<2000"],
+    "http_req_failed": ["rate<0.05"],
+    "checks": ["rate>=0.95"]
+  },
+  "maxDuration": "6m"
+}

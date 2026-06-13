@@ -1,0 +1,63 @@
+{
+  "services": [
+    {
+      "serviceName": "httpbin-api",
+      "metrics": [
+        {
+          "name": "http_req_duration_p95",
+          "target": 800,
+          "riskMargin": 0.15,
+          "unit": "ms"
+        },
+        {
+          "name": "http_req_duration_p99",
+          "target": 1500,
+          "riskMargin": 0.10,
+          "unit": "ms"
+        },
+        {
+          "name": "error_rate",
+          "target": 0.01,
+          "riskMargin": 0.20
+        },
+        {
+          "name": "check_failure_rate",
+          "target": 0.05,
+          "riskMargin": 0.15
+        }
+      ]
+    },
+    {
+      "serviceName": "ecommerce-api",
+      "metrics": [
+        {
+          "name": "http_req_duration_p95",
+          "target": 1000,
+          "riskMargin": 0.15,
+          "unit": "ms"
+        },
+        {
+          "name": "http_req_duration_p99",
+          "target": 2000,
+          "riskMargin": 0.10,
+          "unit": "ms"
+        },
+        {
+          "name": "error_rate",
+          "target": 0.02,
+          "riskMargin": 0.20
+        },
+        {
+          "name": "check_failure_rate",
+          "target": 0.05,
+          "riskMargin": 0.10
+        },
+        {
+          "name": "throughput",
+          "target": 5,
+          "riskMargin": 0.20
+        }
+      ]
+    }
+  ]
+}

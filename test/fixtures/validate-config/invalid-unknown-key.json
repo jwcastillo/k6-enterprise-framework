@@ -1,0 +1,50 @@
+{
+  "client": "my-team",
+  "version": "1.0.0",
+  "description": "Example k6 Enterprise Framework configuration",
+  "environment": "staging",
+  "baseUrl": "https://api.example.com",
+  "endpoints": {
+    "api": {
+      "baseUrl": "https://api.example.com",
+      "timeout": "30s"
+    }
+  },
+  "auth": {
+    "type": "bearer",
+    "tokenEnvVar": "APP_API_TOKEN"
+  },
+  "thresholds": {
+    "http_req_duration": [
+      "p(95)<500",
+      "p(99)<1000"
+    ],
+    "http_req_failed": [
+      "rate<0.01"
+    ]
+  },
+  "scenarios": {
+    "default": {
+      "executor": "ramping-vus",
+      "startVUs": 0,
+      "stages": [
+        {
+          "duration": "1m",
+          "target": 10
+        },
+        {
+          "duration": "3m",
+          "target": 10
+        },
+        {
+          "duration": "1m",
+          "target": 0
+        }
+      ]
+    }
+  },
+  "tags": {
+    "team": "platform"
+  },
+  "unknownTopLevelKey": "huh"
+}

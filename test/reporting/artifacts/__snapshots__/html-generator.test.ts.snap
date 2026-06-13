@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateHtml > matches the snapshot of the stable banner shape 1`] = `"<div class="k6d-banner"><div class="k6d-banner-header"><span class="k6d-banner-title">k6 Enterprise — Performance Report</span><span class="k6d-banner-meta">acme · smoke-users · smoke · staging</span>"`;

@@ -1,0 +1,146 @@
+# T-038 / T-140: GitHub Actions template for running tests with a separate client repo
+# Copy this to your client repo's .github/workflows/ directory
+#
+# ── Security (T-140 / CHK-SEC-047) ────────────────────────────────────────────
+# DO:
+#   - Store all secrets in GitHub repository Secrets (Settings → Secrets → Actions)
+#   - Reference secrets with ${{ secrets.SECRET_NAME }} — never echo or print them
+#   - Use permissions: with minimal scope (contents: read only)
+#   - Pin action versions to full SHA for supply-chain security
+#   - Use timeout-minutes to bound runaway jobs
+#
+# DON'T:
+#   - Write secrets to files (e.g., echo "$TOKEN" > .env)
+#   - Pass secrets as positional arguments to scripts (visible in process list)
+#   - Log secrets with run: echo "${{ secrets.MY_SECRET }}"
+#   - Use pull_request_target with untrusted code and secret access
+#   - Interpolate ${{ github.event.* }} user input directly into shell commands
+#
+# ── Prerequisites ──────────────────────────────────────────────────────────────
+# Repository Secrets (Settings → Secrets → Actions):
+#   K6_FRAMEWORK_TOKEN   GitHub PAT with read access to framework repo
+#   APP_API_KEY          Target application API key (if required by your test)
+#   APP_PASSWORD         Target application password (if required by your test)
+#
+# Repository Variables (Settings → Variables → Actions):
+#   K6_FRAMEWORK_REPO    e.g. org/k6-enterprise-framework
+
+name: k6 Load Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Load profile"
+        required: true
+        default: "smoke"
+        type: choice
+        options: [smoke, quick, load, rampup, capacity, stress]
+      scenario:
+        description: "Scenario path (e.g., api/smoke-users)"
+        required: true
+      environment:
+        description: "Target environment"
+        default: "staging"
+        type: choice
+        options: [default, staging, production]
+
+# T-140: Minimal permissions — only read repo contents. No write access.
+permissions:
+  contents: read
+
+env:
+  K6_CLIENT: ${{ github.event.repository.name }}
+  K6_PROFILE: ${{ inputs.profile || 'smoke' }}
+  K6_ENV: ${{ inputs.environment || 'staging' }}
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout client repository
+        uses: actions/checkout@v4
+
+      - name: Clone k6 framework
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.K6_FRAMEWORK_REPO }}
+          # T-140: Token passed directly to action — never written to disk or echoed
+          token: ${{ secrets.K6_FRAMEWORK_TOKEN }}
+          path: framework
+
+      - name: Link client into framework
+        run: |
+          # T-140: CLIENT_NAME comes from a controlled env var, not raw user input
+          CLIENT_NAME="${K6_CLIENT}"
+          ln -s "${{ github.workspace }}" "framework/clients/${CLIENT_NAME}"
+          echo "Linked client '${CLIENT_NAME}' into framework"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: framework/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix framework
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D68
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+
+      - name: Run test
+        # T-140: Secrets injected as env vars — never passed as CLI arguments.
+        # run-test.sh reads APP_API_KEY / APP_PASSWORD from __ENV (k6 --env flag).
+        # run-test.sh suppresses printing of any env var whose name matches
+        # TOKEN|SECRET|PASSWORD|_KEY via log_debug_safe().
+        env:
+          APP_API_KEY: ${{ secrets.APP_API_KEY }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+        run: |
+          cd framework
+          ./bin/run-test.sh \
+            --client "${K6_CLIENT}" \
+            --scenario "${{ inputs.scenario || 'api/smoke-users' }}" \
+            --profile "${K6_PROFILE}" \
+            --env "${K6_ENV}"
+
+      - name: Scrub secrets from runner environment
+        # T-140: Best-effort check — warn if any secret value appeared in the log.
+        # GitHub Actions automatically masks registered secrets in log output,
+        # but this step provides defense-in-depth by scanning generated artifacts.
+        if: always()
+        run: |
+          REPORT_DIR="framework/reports/${K6_CLIENT}"
+          if [[ -d "${REPORT_DIR}" ]]; then
+            # Scan for patterns that look like leaked tokens in report artifacts
+            LEAKED=$(grep -rEl \
+              'Bearer [A-Za-z0-9_\-]{20,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}' \
+              "${REPORT_DIR}" 2>/dev/null || true)
+            if [[ -n "${LEAKED}" ]]; then
+              echo "::warning::Potential secret pattern found in report artifacts: ${LEAKED}"
+            fi
+          fi
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-reports-${{ env.K6_PROFILE }}
+          # T-140: Upload reports dir — contains no secrets (run-test.sh masks them)
+          path: framework/reports/${{ env.K6_CLIENT }}/
+          retention-days: 30

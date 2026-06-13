@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/threshold-override/v1",
+  "title": "k6 Enterprise Framework — Threshold Override Configuration Schema",
+  "description": "Schema for client-specific threshold overrides stored in clients/{name}/config/thresholds.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "services": {
+      "type": "object",
+      "description": "Service-level threshold overrides (service name -> metric name -> threshold conditions)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Profile-level threshold overrides (profile name -> metric name -> threshold conditions)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "global": {
+      "type": "object",
+      "description": "Global overrides applied to all services and profiles (metric name -> threshold conditions)",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

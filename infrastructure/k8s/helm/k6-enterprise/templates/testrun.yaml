@@ -1,0 +1,76 @@
+{{- /*
+  k6 Enterprise Framework — TestRun CRD template
+  Requires k6-operator to be installed in the cluster.
+  Install: kubectl apply -f https://raw.githubusercontent.com/grafana/k6-operator/main/bundle.yaml
+*/ -}}
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: {{ .Values.test.name | quote }}
+  namespace: {{ .Values.test.namespace | quote }}
+  labels:
+    app: k6-runner
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  parallelism: {{ .Values.test.parallelism }}
+
+  script:
+    configMap:
+      name: {{ .Values.test.script.configMap.name | quote }}
+      file: {{ .Values.test.script.configMap.file | quote }}
+
+  runner:
+    image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    serviceAccountName: {{ .Values.runner.serviceAccountName | quote }}
+
+    resources:
+      requests:
+        cpu: {{ .Values.runner.resources.requests.cpu | quote }}
+        memory: {{ .Values.runner.resources.requests.memory | quote }}
+      limits:
+        cpu: {{ .Values.runner.resources.limits.cpu | quote }}
+        memory: {{ .Values.runner.resources.limits.memory | quote }}
+
+    env:
+    {{- range $key, $val := .Values.runner.env }}
+      - name: {{ $key }}
+        value: {{ $val | quote }}
+    {{- end }}
+    {{- if .Values.prometheus.remoteWrite.enabled }}
+      - name: K6_PROMETHEUS_RW_SERVER_URL
+        value: {{ .Values.prometheus.remoteWrite.url | quote }}
+    {{- end }}
+
+    {{- if .Values.runner.envFromSecret.name }}
+    envFrom:
+      - secretRef:
+          name: {{ .Values.runner.envFromSecret.name | quote }}
+    {{- end }}
+
+    {{- if .Values.runner.nodeSelector }}
+    nodeSelector:
+      {{- toYaml .Values.runner.nodeSelector | nindent 6 }}
+    {{- end }}
+
+    {{- if .Values.runner.tolerations }}
+    tolerations:
+      {{- toYaml .Values.runner.tolerations | nindent 6 }}
+    {{- end }}
+
+    {{- if .Values.runner.affinity }}
+    affinity:
+      {{- toYaml .Values.runner.affinity | nindent 6 }}
+    {{- end }}
+
+    {{- if .Values.persistence.enabled }}
+    volumeMounts:
+      - name: reports
+        mountPath: {{ .Values.persistence.mountPath }}
+    volumes:
+      - name: reports
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-reports
+    {{- end }}

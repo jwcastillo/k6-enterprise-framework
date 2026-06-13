@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "k6 Enterprise Framework — Client Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client"
+  ],
+  "properties": {
+    "client": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "default",
+        "staging",
+        "production"
+      ]
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "defaultProfile": {
+      "type": "string"
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "baseUrl"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "baseUrl"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "timeout": {
+            "type": ["integer", "string"],
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1
+      }
+    },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "executor"
+        ],
+        "properties": {
+          "executor": {
+            "type": "string",
+            "enum": [
+              "constant-vus",
+              "ramping-vus",
+              "constant-arrival-rate",
+              "ramping-arrival-rate",
+              "per-vu-iterations",
+              "shared-iterations",
+              "externally-controlled"
+            ]
+          },
+          "vus": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "duration": {
+            "type": "string",
+            "pattern": "^[0-9]+(ms|s|m|h)$"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "bearer",
+            "basic",
+            "api-key"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "retries": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "retryOn": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "backoffMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+# T-132: Kubernetes NetworkPolicy for k6 test runner isolation
+# Namespace: k6-tests
+#
+# Apply after rbac.yaml:
+#   kubectl apply -f infrastructure/k8s/network-policy.yaml
+#
+# Policies:
+# 1. default-deny-all   — blocks all ingress and egress by default
+# 2. k6-runner-egress   — allows outbound to SUT (80/443), DNS (53), Prometheus (9090)
+# 3. k6-runner-ingress  — allows inbound only from the k6-operator pod
+
+---
+# Policy 1: Default deny all — must be first
+# Ensures no traffic is allowed unless explicitly permitted by subsequent policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: k6-tests
+spec:
+  podSelector: {}       # applies to ALL pods in the namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Policy 2: Allow k6 runner egress
+# Runners need to reach:
+# - The application under test (HTTP/HTTPS)
+# - DNS for hostname resolution
+# - Prometheus for remote-write metrics (within the cluster)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: k6-runner-egress
+  namespace: k6-tests
+spec:
+  podSelector:
+    matchLabels:
+      app: k6-runner
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution — required for all outbound connections
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    # HTTP/HTTPS to the application under test
+    # TODO: Restrict to specific CIDR blocks of your SUT in production
+    # Example: ipBlock: { cidr: "10.0.1.0/24" }
+    - ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+
+    # Prometheus remote-write within the cluster (monitoring namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+
+    # Loki log push within the cluster (monitoring namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 3100
+          protocol: TCP
+
+---
+# Policy 3: Allow ingress from k6-operator only
+# The operator needs to read metrics and coordinate runner pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: k6-runner-ingress-operator
+  namespace: k6-tests
+spec:
+  podSelector:
+    matchLabels:
+      app: k6-runner
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: k6-operator
+      ports:
+        - port: 6565    # k6 API port for distributed coordination
+          protocol: TCP

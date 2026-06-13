@@ -1,0 +1,34 @@
+{
+  "$schema": "https://github.com/k6-enterprise/framework/blob/main/shared/schemas/test-config.schema.json",
+  "client": "my-team",
+  "version": "1.0.0",
+  "description": "Smoke test for the user endpoint",
+  "environment": "staging",
+  "baseUrl": "https://api.example.com",
+  "executor": "constant-vus",
+  "vus": 2,
+  "duration": "1m",
+  "thresholds": {
+    "http_req_duration": ["p(95)<500", "p(99)<1000"],
+    "http_req_failed": ["rate<0.01"],
+    "checks": ["rate>0.99"]
+  },
+  "scenarios": [
+    {
+      "name": "get-users",
+      "method": "GET",
+      "path": "/users",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "checks": [
+        { "name": "status is 200", "expression": "res.status === 200" },
+        { "name": "has data", "expression": "res.json('data') !== undefined" }
+      ]
+    }
+  ],
+  "tags": {
+    "team": "platform",
+    "service": "user-api"
+  }
+}

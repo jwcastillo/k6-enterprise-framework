@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/chaos-config/v1",
+  "title": "k6 Enterprise Framework — Chaos Injection Configuration Schema",
+  "description": "Schema for chaos injection rules stored in clients/{name}/config/chaos.json",
+  "type": "object",
+  "required": ["enabled", "targetService", "faults"],
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Must be explicitly enabled — prevents accidental activation"
+    },
+    "targetService": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Target service or dependency name"
+    },
+    "faults": {
+      "type": "array",
+      "description": "Fault injection rules",
+      "items": {
+        "type": "object",
+        "required": ["type", "probability"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["latency", "http_error", "disconnect", "corruption", "partial_timeout", "rate_limit"],
+            "description": "Type of fault to inject"
+          },
+          "probability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Probability of fault occurring (0.0 to 1.0)"
+          },
+          "params": {
+            "type": "object",
+            "description": "Type-specific parameters (e.g., delayMs, statusCode, retryAfterSec)",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

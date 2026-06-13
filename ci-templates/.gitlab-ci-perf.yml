@@ -1,0 +1,216 @@
+# .gitlab-ci-perf.yml — GitLab CI performance testing templates
+#
+# Usage: Include this file in your .gitlab-ci.yml:
+#
+#   include:
+#     - project: 'your-org/k6-framework'
+#       ref: main
+#       file: 'ci-templates/.gitlab-ci-perf.yml'
+#
+# Or copy-paste the relevant jobs into your own .gitlab-ci.yml.
+#
+# Variables (configure in GitLab CI/CD → Settings → Variables as Protected/Masked):
+#   PERF_SLACK_WEBHOOK    — Slack incoming webhook URL
+#   PERF_EMAIL_TO         — Email notification recipient
+#   PERF_NOTIFY_WEBHOOK   — Generic webhook URL
+#
+# Trigger via API (curl with GitLab PAT):
+#   curl -X POST \
+#     -F "token=<trigger_token>" \
+#     -F "ref=main" \
+#     -F "variables[CLIENT]=_reference" \
+#     -F "variables[ENV]=staging" \
+#     -F "variables[PROFILE]=smoke" \
+#     https://gitlab.com/api/v4/projects/<project_id>/trigger/pipeline
+#
+# Cross-pipeline trigger from another repo:
+#   trigger-perf:
+#     trigger:
+#       project: 'your-org/k6-framework'
+#       branch: main
+#       strategy: depend
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+variables:
+  # Override per-project as needed
+  PERF_CLIENT: "_reference"
+  PERF_ENV: "staging"
+  PERF_PROFILE: "smoke"
+  PERF_SUITE: "nightly"
+  PERF_NOTIFY: "none"
+  K6_VERSION: "0.54.0"
+  NODE_VERSION: "20"
+  REPORTS_DIR: "reports"
+
+# ── Hidden job templates (.anchor) ────────────────────────────────────────────
+
+# Base setup for all perf jobs
+.perf-base:
+  image: node:${NODE_VERSION}-alpine
+  before_script:
+    - apk add --no-cache curl bash
+    # Install k6
+    - curl -L "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz" | tar xz
+    - mv "k6-v${K6_VERSION}-linux-amd64/k6" /usr/local/bin/k6
+    - chmod +x /usr/local/bin/k6
+    - k6 version
+    # Install Node dependencies
+    - cd k6-framework && npm ci --prefer-offline && npm run build && cd ..
+  cache:
+    key: "perf-npm-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - k6-framework/node_modules/
+  artifacts:
+    when: always
+    paths:
+      - k6-framework/reports/
+    expire_in: 30 days
+  variables:
+    GIT_DEPTH: "0"  # Full clone for baseline comparison
+
+# ── Job: Manual smoke test ─────────────────────────────────────────────────────
+# Run from GitLab CI/CD → Pipelines → Run pipeline (set variables CLIENT, ENV, PROFILE)
+perf:smoke:
+  extends: .perf-base
+  stage: test
+  when: manual
+  allow_failure: false
+  variables:
+    CLIENT: "${PERF_CLIENT}"
+    ENV: "${PERF_ENV}"
+    PROFILE: "${PERF_PROFILE}"
+    NOTIFY: "${PERF_NOTIFY}"
+  script:
+    - |
+      cd k6-framework
+      bash bin/run-test.sh \
+        --client="${CLIENT}" \
+        --env="${ENV}" \
+        --profile="${PROFILE}" \
+        --notify="${NOTIFY}" \
+        --out="json=reports/smoke-${CLIENT}-${CI_PIPELINE_ID}.json"
+  artifacts:
+    reports:
+      junit: k6-framework/reports/smoke-*-${CI_PIPELINE_ID}-junit.xml
+    paths:
+      - k6-framework/reports/smoke-*-${CI_PIPELINE_ID}.*
+    expire_in: 30 days
+  environment:
+    name: performance/smoke
+    action: prepare
+
+# ── Job: Quality gate (Merge Request) ─────────────────────────────────────────
+# Runs automatically on every MR. Blocks merge on quality gate failure.
+perf:gate:
+  extends: .perf-base
+  stage: test
+  # Only run on MR pipelines
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  allow_failure: false
+  variables:
+    CLIENT: "${PERF_CLIENT}"
+    ENV: "${PERF_ENV}"
+    # T-085: Override thresholds per pipeline via env var
+    QG_THRESHOLDS_OVERRIDE: "${PERF_QG_THRESHOLDS_OVERRIDE}"
+    # T-088: Inline config via TEST_CONFIG env var
+    TEST_CONFIG: "${PERF_TEST_CONFIG}"
+  script:
+    - |
+      cd k6-framework
+      bash bin/run-test.sh \
+        --client="${CLIENT}" \
+        --env="${ENV}" \
+        --profile=smoke \
+        --quality-gate \
+        --out="json=reports/gate-${CLIENT}-${CI_PIPELINE_ID}.json"
+      EXIT_CODE=$?
+
+      # Generate JUnit report for GitLab MR integration
+      node bin/generate-report.js \
+        --input "reports/gate-${CLIENT}-${CI_PIPELINE_ID}.json" \
+        --output "reports/gate-${CLIENT}-${CI_PIPELINE_ID}-junit.xml" \
+        --type junit || true
+
+      exit $EXIT_CODE
+  artifacts:
+    # Integrate with GitLab MR test widget
+    reports:
+      junit: k6-framework/reports/gate-*-${CI_PIPELINE_ID}-junit.xml
+    paths:
+      - k6-framework/reports/gate-*-${CI_PIPELINE_ID}.*
+    expire_in: 14 days
+
+# ── Job: Nightly regression suite ─────────────────────────────────────────────
+# Runs on schedule. Configure in GitLab CI/CD → Schedules.
+perf:regression:nightly:
+  extends: .perf-base
+  stage: test
+  # Only run on scheduled pipelines (or manual trigger)
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "api"
+      when: manual
+  allow_failure: true
+  variables:
+    CLIENT: "${PERF_CLIENT}"
+    SUITE: "${PERF_SUITE}"
+    ENV: "${PERF_ENV}"
+    NOTIFY: "slack"
+  script:
+    - |
+      cd k6-framework
+
+      # T-083: Run regression with exit codes
+      bash bin/run-regression.sh \
+        --suite="${SUITE}" \
+        --client="${CLIENT}" \
+        --env="${ENV}" \
+        --notify="${NOTIFY}"
+      EXIT_CODE=$?
+
+      # Exit 99 (critical) → fail the job
+      # Exit 1 (significant) → warn but don't fail (allow_failure: true)
+      if [ "$EXIT_CODE" -eq 99 ]; then
+        echo "CRITICAL regressions detected — failing job"
+        exit 1
+      fi
+      exit 0
+  environment:
+    name: performance/regression
+    action: prepare
+  artifacts:
+    paths:
+      - k6-framework/reports/${PERF_CLIENT}/regression/
+    expire_in: 90 days
+
+# ── Job: Cross-pipeline trigger template ──────────────────────────────────────
+# Include this job in the CONSUMER repo's .gitlab-ci.yml to trigger perf tests
+# in the framework repo.
+#
+# Example usage (in consumer repo):
+#
+# trigger-perf-gate:
+#   extends: .perf-cross-pipeline-trigger
+#   variables:
+#     DOWNSTREAM_CLIENT: "my-service"
+#     DOWNSTREAM_ENV: "staging"
+#
+.perf-cross-pipeline-trigger:
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    DOWNSTREAM_CLIENT: "${CI_PROJECT_NAME}"
+    DOWNSTREAM_ENV: "staging"
+  trigger:
+    # Replace with your k6-framework project path
+    project: "your-org/k6-framework"
+    branch: main
+    strategy: depend
+  inherit:
+    variables:
+      - PERF_SLACK_WEBHOOK
+      - PERF_QG_THRESHOLDS_OVERRIDE

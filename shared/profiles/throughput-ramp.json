@@ -1,0 +1,20 @@
+{
+  "name": "throughput-ramp",
+  "description": "Ramping throughput (10→100 req/s) — arrival-rate open model with gradual increase",
+  "executor": "ramping-arrival-rate",
+  "stages": [
+    { "duration": "2m", "target": 10 },
+    { "duration": "3m", "target": 50 },
+    { "duration": "3m", "target": 100 },
+    { "duration": "2m", "target": 100 },
+    { "duration": "2m", "target": 0 }
+  ],
+  "preAllocatedVUs": 120,
+  "maxVUs": 300,
+  "thresholds": {
+    "http_req_duration": ["p(95)<2000", "p(99)<5000"],
+    "http_req_failed": ["rate<0.10"],
+    "checks": ["rate>=0.90"]
+  },
+  "maxDuration": "15m"
+}

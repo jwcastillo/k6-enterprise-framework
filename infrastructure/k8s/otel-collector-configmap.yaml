@@ -1,0 +1,85 @@
+# OBS2-01 / Phase 08-04: Kubernetes ConfigMap for OTel Collector pipeline.
+#
+# This ConfigMap inlines the canonical collector pipeline from
+# `infrastructure/otel-collector/collector-config.yaml` (the single source of truth
+# shipped by plan 08-01 for docker-compose). Service hostnames are rewritten to the
+# in-cluster ClusterIP DNS form (<svc>.<ns>.svc.cluster.local) so the same pipeline
+# runs inside Kubernetes with no shape change.
+#
+# Apply order: this ConfigMap MUST exist BEFORE the Deployment that mounts it.
+#   kubectl apply -f infrastructure/k8s/otel-collector-configmap.yaml \
+#                 -f infrastructure/k8s/otel-collector-deployment.yaml \
+#                 -n k6-tests
+#
+# Namespace: k6-tests (matches the established namespace in rbac.yaml + k6-testrun.yaml).
+# Operator prerequisite: a Tempo Service and a Prometheus Service must exist in the
+# k6-tests namespace (DNS targets are spelled out in the exporters block below) for
+# end-to-end trace/metric flow. The Collector's Deployment Readiness gate (health_check
+# on :13133) is decoupled from those backends — Readiness reflects only the collector's
+# own pipeline boot, not exporter reachability.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: k6-tests
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/component: telemetry-ingress
+    app.kubernetes.io/part-of: k6-enterprise-framework
+data:
+  config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+        path: /
+      pprof:
+        endpoint: 0.0.0.0:1777
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo.k6-tests.svc.cluster.local:4317
+        tls:
+          insecure: true
+      prometheusremotewrite:
+        endpoint: http://prometheus.k6-tests.svc.cluster.local:9090/api/v1/write
+        tls:
+          insecure: true
+        resource_to_telemetry_conversion:
+          enabled: true
+      debug:
+        verbosity: basic
+
+    service:
+      extensions: [health_check, pprof]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]
+      telemetry:
+        logs: { level: info }
+        metrics: { address: 0.0.0.0:8888 }

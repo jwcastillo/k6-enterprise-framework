@@ -1,0 +1,84 @@
+# k6 Enterprise Framework — Declarative Test Scenario Template (YAML)
+# T-167 (Phase 8): Starter template for teams that prefer YAML over TypeScript.
+#
+# Usage:
+#   ./bin/run-test.sh --client=my-team --scenario=scenarios/test.yaml --profile=smoke
+#
+# Validate:
+#   node bin/validate-config.js --file=scenarios/test.yaml
+#
+# Convert to JSON:
+#   node bin/validate-config.js --convert --format=json scenarios/test.yaml
+
+# Required: identifier for your team/service
+client: my-team
+
+# Required: semantic version of this test definition
+version: "1.0.0"
+
+# Optional: human-readable description
+description: Smoke test for the user endpoint
+
+# Required: target environment name (maps to clients/<client>/config/<env>.json)
+environment: staging
+
+# Required: base URL of the service under test
+# Can reference env var: ${BASE_URL}
+baseUrl: https://api.example.com
+
+# Required: k6 executor type
+# Options: constant-vus | ramping-vus | constant-arrival-rate | ramping-arrival-rate
+#          per-vu-iterations | shared-iterations | externally-controlled
+executor: constant-vus
+
+# Number of virtual users (positive integer)
+vus: 2
+
+# Test duration (string with unit: s, m, h)
+duration: 1m
+
+# SLO thresholds — test fails if any condition is violated
+thresholds:
+  http_req_duration:
+    - "p(95)<500"   # 95th percentile under 500ms
+    - "p(99)<1000"  # 99th percentile under 1000ms
+  http_req_failed:
+    - "rate<0.01"   # less than 1% errors
+  checks:
+    - "rate>0.99"   # more than 99% of checks passing
+
+# Scenario steps (executed in sequence per VU iteration)
+scenarios:
+  - name: get-users
+    method: GET
+    path: /users
+    headers:
+      Content-Type: application/json
+    checks:
+      - name: status is 200
+        expression: "res.status === 200"
+      - name: has data field
+        expression: "res.json('data') !== undefined"
+
+  # Example POST scenario (uncomment to use):
+  # - name: create-user
+  #   method: POST
+  #   path: /users
+  #   body:
+  #     name: "Test User"
+  #     email: "test@example.com"
+  #   headers:
+  #     Content-Type: application/json
+  #   checks:
+  #     - name: created
+  #       expression: "res.status === 201"
+
+# Optional: authentication configuration
+# auth:
+#   type: bearer               # bearer | basic | apikey | none
+#   tokenEnvVar: API_TOKEN     # env var holding the token
+
+# Metadata tags attached to all metrics
+tags:
+  team: platform
+  service: user-api

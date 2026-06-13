@@ -1,0 +1,357 @@
+# k6 Enterprise Framework — Full Observability Stack
+#
+# Usage:
+#   docker compose up -d                              # Core stack (Grafana + Prometheus + Redis)
+#   docker compose --profile observability up -d     # Add Loki + Tempo + Pyroscope
+#   docker compose --profile run up k6               # Run a test script
+#
+# Configuration:
+#   cp infrastructure/.env.example infrastructure/.env
+#   docker compose --env-file infrastructure/.env up -d
+#
+# Ports exposed to host (default):
+#   3000  — Grafana dashboards
+#   6565  — k6 REST API (only when 'run' profile active)
+#
+# All other service ports are internal-only (k6-net).
+# Use docker-compose.override.yml to expose them for local debugging.
+
+networks:
+  k6-net:
+    driver: bridge
+
+volumes:
+  grafana-data:
+    name: k6-grafana
+  prometheus-data:
+    name: k6-prometheus
+  loki-data:
+    name: k6-loki
+  tempo-data:
+    name: k6-tempo
+  pyroscope-data:
+    name: k6-pyroscope
+  redis-data:
+    name: k6-redis
+  chromadb-data:
+    name: k6-chromadb
+
+services:
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    container_name: k6-grafana
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    environment:
+      # Dev: anonymous read-only access enabled by default.
+      # Production: use docker-compose.prod.yml which disables anonymous access.
+      - GF_AUTH_ANONYMOUS_ENABLED=${GF_AUTH_ANONYMOUS_ENABLED:-true}
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=${GF_AUTH_ANONYMOUS_ORG_ROLE:-Viewer}
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+      # T-150: Credentials via env — never hardcoded.
+      # Change GF_SECURITY_ADMIN_PASSWORD in .env (or use docker-compose.prod.yml for production).
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - k6-net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    container_name: k6-prometheus
+    # T-135 / T-146 (CHK-SEC-098): Not exposed to host — internal only.
+    # Use docker-compose.override.yml.example to expose port 9090 for local debugging.
+    # Port 5656 (StatsD/direct push) is intentionally NOT used — metrics flow via
+    # remote-write only (push from k6 → Prometheus endpoint), which is already
+    # restricted to the k6-net internal network.
+    expose:
+      - "9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${RETENTION_DAYS:-30}d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - k6-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      start_period: 20s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Loki ───────────────────────────────────────────────────────────────────
+  # T-147: Part of 'observability' profile.
+  # Start with: docker compose --profile observability up -d
+  loki:
+    image: grafana/loki:${LOKI_VERSION:-3.6.7}
+    container_name: k6-loki
+    profiles:
+      - observability
+    expose:
+      - "3100"
+    command: -config.file=/etc/loki/loki-config.yml -config.expand-env=true
+    environment:
+      - RETENTION_DAYS=${RETENTION_DAYS:-30}
+    volumes:
+      - loki-data:/loki
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    networks:
+      - k6-net
+    restart: unless-stopped
+    healthcheck:
+      # Loki 3.6+ uses a distroless image without wget/curl.
+      disable: true
+
+  # ── Tempo ──────────────────────────────────────────────────────────────────
+  # T-147: Part of 'observability' profile — distributed tracing via OTLP.
+  tempo:
+    image: grafana/tempo:${TEMPO_VERSION:-2.10.1}
+    container_name: k6-tempo
+    profiles:
+      - observability
+    expose:
+      - "3200"
+      - "4317" # OTLP gRPC
+      - "4318" # OTLP HTTP
+    command: -config.file=/etc/tempo/tempo-config.yml
+    volumes:
+      - tempo-data:/var/tempo
+      - ./tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+    networks:
+      - k6-net
+    restart: unless-stopped
+    healthcheck:
+      # Tempo 2.10+ uses a distroless image without wget/curl.
+      # Disable healthcheck — Tempo logs "Tempo started" on successful init.
+      disable: true
+
+  # ── Pyroscope ──────────────────────────────────────────────────────────────
+  # T-147: Part of 'observability' profile — continuous profiling.
+  # Internal only: k6 runner accesses via http://pyroscope:4040 inside k6-net.
+  pyroscope:
+    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.18.1}
+    container_name: k6-pyroscope
+    profiles:
+      - observability
+    expose:
+      - "4040"
+    networks:
+      - k6-net
+    volumes:
+      - pyroscope-data:/data
+    restart: unless-stopped
+    healthcheck:
+      # Pyroscope 1.18+ uses a distroless image without wget/curl.
+      disable: true
+
+  # ── OpenTelemetry Collector (contrib) ─────────────────────────────────────
+  # OBS2-01 / Phase 08-01: Canonical OTLP ingress for k6 traces+metrics.
+  # Contrib distribution required for the prometheusremotewrite exporter (not in core).
+  # Pinned via OTEL_COLLECTOR_VERSION (default 0.152.0); override in .env if needed.
+  # Internal only on k6-net (4317/4318/13133/1777/8888); expose to host via
+  # docker-compose.override.yml mirroring the Tempo example.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION:-0.152.0}
+    container_name: k6-otel-collector
+    profiles:
+      - observability
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    expose:
+      - "4317"  # OTLP gRPC (k6 ingress)
+      - "4318"  # OTLP HTTP (k6 ingress)
+      - "13133" # health_check extension
+      - "1777"  # pprof extension
+      - "8888"  # collector self-metrics
+    volumes:
+      - ./otel-collector/collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - k6-net
+    depends_on:
+      tempo:
+        # Tempo has healthcheck disabled (distroless image); use service_started.
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # otelcol-contrib is distroless (no shell/curl/wget). Liveness verified via
+      # 'docker compose ps' STATUS column and the / endpoint of the health_check
+      # extension when exposed (port 13133).
+      disable: true
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  # T-100: Optional service — activate with --profile redis.
+  # Internal only — port 6379 NOT exposed to host (CHK-SEC-108).
+  # Password injected via REDIS_PASSWORD env var (CHK-SEC-104).
+  #
+  # Usage:
+  #   docker compose --profile redis up -d           # start Redis + core stack
+  #   docker compose --profile redis --profile run up k6  # run k6 with Redis
+  #
+  # Local (without Docker): set REDIS_URL=redis://localhost:6379
+  # With auth (Docker):     set REDIS_PASSWORD=mysecret in .env
+  redis:
+    image: redis:${REDIS_VERSION:-7-alpine}
+    container_name: k6-redis
+    profiles:
+      - redis
+    # T-100: Port 6379 NOT exposed to host — only accessible inside k6-net (CHK-SEC-108)
+    expose:
+      - "6379"
+    command: >
+      sh -c "
+        if [ -n '$$REDIS_PASSWORD' ]; then
+          redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass $$REDIS_PASSWORD
+        else
+          redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
+        fi
+      "
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    networks:
+      - k6-net
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          if [ -n "$$REDIS_PASSWORD" ]; then
+            redis-cli -a "$$REDIS_PASSWORD" ping
+          else
+            redis-cli ping
+          fi
+      start_period: 10s
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── ChromaDB Vector DB ────────────────────────────────────────────────────
+  # T-108: Optional AI service — activate with --profile ai.
+  # Internal only — port 8000 NOT exposed to host (CHK-SEC-115).
+  # Stores semantic embeddings for the RAG knowledge base.
+  #
+  # Usage:
+  #   docker compose --profile ai up -d           # start ChromaDB + core stack
+  #   docker compose --profile ai up chromadb     # ChromaDB only
+  #
+  # Data persisted in volume k6-chromadb.
+  # Multi-tenant isolation: collections named per clientId (CHK-SEC-115).
+  chromadb:
+    image: chromadb/chroma:${CHROMADB_VERSION:-0.5.0}
+    container_name: k6-chromadb
+    profiles:
+      - ai
+    # T-108: Port 8000 NOT exposed to host — only accessible inside k6-net (CHK-SEC-115)
+    expose:
+      - "8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=${CHROMA_AUTH_PROVIDER:-}
+      - CHROMA_SERVER_AUTH_CREDENTIALS=${CHROMA_AUTH_TOKEN:-}
+    volumes:
+      - chromadb-data:/chroma/chroma
+    networks:
+      - k6-net
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8000/api/v1/heartbeat",
+        ]
+      start_period: 15s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── k6 Load Generator ─────────────────────────────────────────────────────
+  # Only starts when: docker compose --profile run up k6
+  # T-146: Only port 6565 (k6 REST API) exposed to host from this service.
+  k6:
+    image: grafana/k6:${K6_VERSION:-1.6.1}
+    container_name: k6-runner
+    profiles:
+      - run
+    ports:
+      - "${K6_API_HOST_PORT:-6565}:6565"
+    environment:
+      # T-150: All values via env references — never hardcoded.
+      # ── Prometheus remote-write ──
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+      - "K6_PROMETHEUS_RW_TREND_STATS=avg,min,med,max,p(90),p(95),p(99)"
+      # ── OpenTelemetry (Tempo traces + metrics) ──
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - K6_OTEL_GRPC_EXPORTER_INSECURE=true
+      - K6_OTEL_METRIC_PREFIX=k6_
+      # OBS2-01: Route OTLP through the collector (preferred over Tempo-direct)
+      - K6_OTEL_ENABLED=${K6_OTEL_ENABLED:-true}
+      - K6_OTEL_GRPC_EXPORTER_ENDPOINT=http://otel-collector:4317
+      # Resource attributes — composed by bin/run-test.sh when invoked from host.
+      # In compose context (no run-test.sh wrapper), the four canonical attrs
+      # are best-effort filled from environment with sensible defaults.
+      - K6_OTEL_RESOURCE_ATTRIBUTES=run_id=${K6_RUN_ID:-compose-${COMPOSE_PROJECT_NAME:-k6}},client=${K6_CLIENT:-_reference},scenario=${K6_SCENARIO:-api/smoke-users},profile=${K6_PROFILE:-smoke}
+      - OTEL_RESOURCE_ATTRIBUTES=${K6_OTEL_RESOURCE_ATTRIBUTES:-run_id=compose-${COMPOSE_PROJECT_NAME:-k6},client=${K6_CLIENT:-_reference},scenario=${K6_SCENARIO:-api/smoke-users},profile=${K6_PROFILE:-smoke}}
+      # ── Tracing (header injection) ──
+      - K6_TEMPO_ENABLED=true
+      - K6_TEMPO_ENDPOINT=http://tempo:4317
+      - K6_TEMPO_PROPAGATION=w3c
+      # ── Loki (structured logs) ──
+      - K6_LOKI_URL=http://loki:3100/loki/api/v1/push
+      - K6_STRUCTURED_LOGS=true
+      # ── Pyroscope (profiling labels) ──
+      - K6_PYROSCOPE_ENABLED=true
+      - K6_PYROSCOPE_ENDPOINT=http://pyroscope:4040
+      # ── Redis ──
+      # T-100: REDIS_URL injected automatically when Redis service is active (CHK-API-348).
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    volumes:
+      - ../dist:/scripts:ro
+      - ../reports:/reports
+    networks:
+      - k6-net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+      # OBS2-01: depends_on otel-collector (observability profile). Compose
+      # tolerates depends_on entries for profiles not currently active; the
+      # collector is distroless and healthcheck-disabled so service_started.
+      otel-collector:
+        condition: service_started
+      # T-100: k6-runner waits for Redis healthcheck when Redis profile is active
+      # Note: depends_on entries for optional profiles are skipped when that profile
+      # is not active — Docker Compose handles this gracefully.

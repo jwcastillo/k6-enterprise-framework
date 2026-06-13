@@ -1,0 +1,70 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'bin/**'
+      - 'test/**'
+      - 'clients/**'
+      - 'vitest.config.ts'
+      - 'tsconfig.json'
+      - 'eslint.config.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/unit-test.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'bin/**'
+      - 'test/**'
+      - 'clients/**'
+      - 'vitest.config.ts'
+      - 'tsconfig.json'
+      - 'eslint.config.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/unit-test.yml'
+
+jobs:
+  test:
+    name: Vitest (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'pnpm'
+      - name: Install dependencies (standalone, ignore workspace)
+        run: pnpm install --ignore-workspace --frozen-lockfile
+      # LINT-04 zero-tolerance gate: src/ + tracked clients/ (per-client gitignored trees
+      # are absent in CI and carry separate CI in their standalone repos).
+      # --max-warnings 0 fails on any warning; --error-on-unmatched-pattern fails loud
+      # if a gitignore drift makes the glob match nothing (instead of false-greening).
+      - name: Lint (zero-tolerance)
+        run: pnpm exec eslint 'src/**/*.ts' 'clients/**/*.ts' --max-warnings 0 --error-on-unmatched-pattern
+      # LINT-04 typecheck gate: tsc --noEmit on tracked surface (tsconfig globs naturally
+      # exclude archive/** and gitignored client trees).
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      # Coverage step also runs unit tests and enforces thresholds (60/55/60/60).
+      # vitest exits non-zero when thresholds are violated — this is the COV-08 gate.
+      - name: Run tests with coverage enforcement
+        run: pnpm run test:coverage
+      - uses: actions/upload-artifact@v4
+        if: matrix.node == '20' && always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7

@@ -1,0 +1,386 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://k6-enterprise-framework/schemas/test-definition.schema.json",
+  "title": "k6 Enterprise Framework — Declarative Test Definition",
+  "description": "Schema for JSON/YAML declarative test definitions (T-144). Validated by declarative-engine.ts before execution.",
+  "type": "object",
+  "required": ["client"],
+  "additionalProperties": false,
+  "properties": {
+    "client": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Client identifier (must match clients/<client>/ directory)"
+    },
+    "version": {
+      "type": "string",
+      "description": "Test definition version (semver)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this test"
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "Base URL for all requests. Can reference env var: ${BASE_URL}"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["smoke", "quick", "load", "rampup", "capacity", "stress", "spike", "breakpoint", "soak"],
+      "description": "Default load profile if --profile is not specified on CLI"
+    },
+    "extensions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+(@[0-9]+\\.[0-9]+\\.[0-9]+)?$" },
+      "description": "xk6 extensions required by this test (e.g. redis, sql)",
+      "uniqueItems": true
+    },
+    "scenarios": {
+      "type": "object",
+      "description": "k6 scenario definitions. Keys are scenario names.",
+      "additionalProperties": {
+        "$ref": "#/definitions/ScenarioDef"
+      },
+      "minProperties": 1
+    },
+    "thresholds": {
+      "type": "object",
+      "description": "k6 threshold expressions. Keys are metric names.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "array", "items": { "type": "string" } },
+          { "type": "string" }
+        ]
+      }
+    },
+    "requests": {
+      "type": "array",
+      "description": "HTTP request definitions executed in the default scenario",
+      "items": { "$ref": "#/definitions/RequestDef" },
+      "minItems": 1
+    },
+    "auth": {
+      "$ref": "#/definitions/AuthDef"
+    },
+    "retries": {
+      "$ref": "#/definitions/RetriesDef"
+    },
+    "browser": {
+      "$ref": "#/definitions/BrowserDef"
+    },
+    "tags": {
+      "type": "object",
+      "description": "Default tags applied to all metrics",
+      "additionalProperties": { "type": "string" }
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variable overrides for this test. Use ${VAR} syntax to reference real env vars.",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+
+  "definitions": {
+    "ScenarioDef": {
+      "type": "object",
+      "required": ["executor"],
+      "additionalProperties": false,
+      "properties": {
+        "executor": {
+          "type": "string",
+          "enum": [
+            "constant-vus",
+            "ramping-vus",
+            "constant-arrival-rate",
+            "ramping-arrival-rate",
+            "per-vu-iterations",
+            "shared-iterations",
+            "externally-controlled"
+          ],
+          "description": "k6 executor type"
+        },
+        "vus": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of virtual users (constant-vus, shared-iterations)"
+        },
+        "duration": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Test duration (e.g. 30s, 5m, 1h)"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total iterations (per-vu-iterations, shared-iterations)"
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Arrival rate (constant-arrival-rate, ramping-arrival-rate)"
+        },
+        "timeUnit": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Time unit for rate (e.g. 1s, 1m)"
+        },
+        "startVUs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Starting VUs (ramping-vus, ramping-arrival-rate)"
+        },
+        "stages": {
+          "type": "array",
+          "description": "Ramping stages (ramping-vus, ramping-arrival-rate)",
+          "items": {
+            "type": "object",
+            "required": ["duration", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "duration": {
+                "type": "string",
+                "pattern": "^[0-9]+(ms|s|m|h)$"
+              },
+              "target": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "maxDuration": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Maximum allowed duration for the scenario"
+        },
+        "gracefulStop": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$"
+        },
+        "gracefulRampDown": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$"
+        },
+        "preAllocatedVUs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pre-allocated VUs for arrival-rate executors"
+        },
+        "maxVUs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum VUs for arrival-rate executors"
+        },
+        "exec": {
+          "type": "string",
+          "description": "Function name to execute (for multi-scenario tests)"
+        },
+        "startTime": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Delay before this scenario starts"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "RequestDef": {
+      "type": "object",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Request URL. Can be relative to baseUrl or absolute. Supports ${VAR}."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+          "default": "GET"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Request headers. Values support ${VAR} interpolation."
+        },
+        "body": {
+          "description": "Request body. String or JSON object.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "object" }
+          ]
+        },
+        "checks": {
+          "type": "object",
+          "description": "k6 check assertions. Keys are check names, values are JS expressions.",
+          "additionalProperties": { "type": "string" }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Request timeout"
+        },
+        "think": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Think time (sleep) after this request"
+        }
+      }
+    },
+
+    "AuthDef": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "bearer", "basic", "api-key"],
+          "description": "Authentication type"
+        },
+        "tokenEnvVar": {
+          "type": "string",
+          "description": "Env var containing the bearer token (for type: bearer)"
+        },
+        "usernameEnvVar": {
+          "type": "string",
+          "description": "Env var containing the username (for type: basic)"
+        },
+        "passwordEnvVar": {
+          "type": "string",
+          "description": "Env var containing the password (for type: basic)"
+        },
+        "headerName": {
+          "type": "string",
+          "description": "Header name for API key (for type: api-key, default: X-API-Key)"
+        },
+        "headerEnvVar": {
+          "type": "string",
+          "description": "Env var containing the API key value (for type: api-key)"
+        }
+      }
+    },
+
+    "RetriesDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "maxRetries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "retryOn": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "description": "HTTP status codes that trigger a retry (e.g. [429, 503])"
+        },
+        "backoffMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Base backoff in ms between retries"
+        }
+      }
+    },
+
+    "BrowserDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["chromium"],
+          "default": "chromium",
+          "description": "Browser type (currently only chromium is supported by k6)"
+        },
+        "headless": {
+          "type": "boolean",
+          "default": true
+        },
+        "scenarios": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/BrowserScenarioDef" }
+        }
+      }
+    },
+
+    "BrowserScenarioDef": {
+      "type": "object",
+      "required": ["name", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action"],
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["goto", "click", "fill", "screenshot", "waitForSelector", "check"]
+              },
+              "selector": { "type": "string" },
+              "value": { "type": "string" },
+              "url": { "type": "string" },
+              "path": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "client": "payment-api",
+      "description": "Smoke test for payment service",
+      "baseUrl": "${BASE_URL}",
+      "profile": "smoke",
+      "requests": [
+        {
+          "url": "/api/v1/health",
+          "method": "GET",
+          "checks": {
+            "status is 200": "res.status === 200",
+            "response time < 500ms": "res.timings.duration < 500"
+          }
+        },
+        {
+          "url": "/api/v1/payments",
+          "method": "POST",
+          "headers": { "Content-Type": "application/json" },
+          "body": { "amount": 100, "currency": "USD" },
+          "checks": { "created": "res.status === 201" },
+          "think": "1s"
+        }
+      ],
+      "thresholds": {
+        "http_req_duration": ["p(95)<500", "p(99)<1000"],
+        "http_req_failed": ["rate<0.01"]
+      },
+      "auth": {
+        "type": "bearer",
+        "tokenEnvVar": "API_TOKEN"
+      }
+    }
+  ]
+}

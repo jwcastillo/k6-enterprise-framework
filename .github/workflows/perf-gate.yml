@@ -1,0 +1,189 @@
+# perf-gate.yml — Performance quality gate for Pull Requests
+#
+# Trigger: pull_request (runs on every PR against main/develop)
+# Blocks merge if quality gate fails (exit code 1).
+#
+# Secrets required:
+#   PERF_SLACK_WEBHOOK  — Slack webhook for PR notifications (optional)
+#
+# To configure as a required status check:
+#   GitHub repo Settings → Branches → Branch protection rules → Require status checks
+#   Add: "Quality Gate / perf-gate"
+
+name: Performance Quality Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - "release/**"
+    paths:
+      # Only run when app code or perf tests change
+      - "src/**"
+      - "k6-framework/clients/**"
+      - "k6-framework/src/**"
+
+  # Allow manual trigger for debugging
+  workflow_dispatch:
+    inputs:
+      client:
+        description: "Client name"
+        required: true
+        default: "_reference"
+      env:
+        description: "Target environment"
+        required: true
+        default: "staging"
+
+concurrency:
+  group: perf-gate-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  perf-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Output quality gate result for downstream jobs
+    outputs:
+      gate_passed: ${{ steps.quality-gate.outputs.gate_passed }}
+      report_url: ${{ steps.quality-gate.outputs.report_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "0.54.0"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: k6-framework/package-lock.json
+
+      - name: Install dependencies
+        working-directory: k6-framework
+        run: npm ci --prefer-offline
+
+      - name: Build TypeScript
+        working-directory: k6-framework
+        run: npm run build
+
+      - name: Run quality gate (smoke profile)
+        id: quality-gate
+        working-directory: k6-framework
+        env:
+          # T-088: Support TEST_CONFIG env var for inline config
+          TEST_CONFIG: ${{ vars.PERF_TEST_CONFIG }}
+          # T-085: Override thresholds per pipeline if needed
+          QG_THRESHOLDS_OVERRIDE: ${{ vars.PERF_QG_THRESHOLDS_OVERRIDE }}
+          NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+        run: |
+          CLIENT="${{ github.event.inputs.client || '_reference' }}"
+          ENV="${{ github.event.inputs.env || 'staging' }}"
+          REPORT_FILE="reports/gate-${CLIENT}-${{ github.run_id }}.json"
+
+          set +e
+          bash bin/run-test.sh \
+            --client="${CLIENT}" \
+            --env="${ENV}" \
+            --profile=smoke \
+            --quality-gate \
+            --out="json=${REPORT_FILE}"
+          EXIT_CODE=$?
+          set -e
+
+          # T-085: Map exit codes
+          case $EXIT_CODE in
+            0)  GATE_PASSED=true;  echo "gate_passed=true"  >> "$GITHUB_OUTPUT" ;;
+            1)  GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
+            99) GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
+            *)  GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          echo "exit_code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+          echo "report_file=${REPORT_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate quality gate report
+        if: always()
+        working-directory: k6-framework
+        run: |
+          node bin/generate-report.js \
+            --input "reports/gate-${{ github.event.inputs.client || '_reference' }}-${{ github.run_id }}.json" \
+            --output "reports/gate-${{ github.event.inputs.client || '_reference' }}-${{ github.run_id }}.html" \
+            --type quality-gate || true
+
+      - name: Upload gate report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-gate-report-${{ github.run_id }}
+          path: k6-framework/reports/gate-*-${{ github.run_id }}.*
+          retention-days: 14
+
+      - name: Post PR comment with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const passed = '${{ steps.quality-gate.outputs.gate_passed }}' === 'true';
+            const exitCode = '${{ steps.quality-gate.outputs.exit_code }}';
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+
+            const exitCodeDesc = {
+              '0': 'All thresholds passed',
+              '1': 'One or more thresholds failed',
+              '2': 'Execution error',
+              '99': 'Threshold failure with partial data'
+            }[exitCode] || `Unknown (${exitCode})`;
+
+            const body = `## ${passed ? '✅' : '❌'} Performance Quality Gate — ${passed ? 'PASS' : 'FAIL'}
+
+            | Field       | Value |
+            |---|---|
+            | Exit code   | \`${exitCode}\` — ${exitCodeDesc} |
+            | Profile     | \`smoke\` |
+            | Environment | \`staging\` |
+            | Report      | [View artifacts](${runUrl}) |
+
+            ${!passed ? '> ⚠️ **This PR is blocked pending performance regression fix.**\n> Review the threshold failures in the artifact report.' : '> All performance thresholds are within acceptable limits.'}
+
+            <sub>Generated by [perf-gate workflow](${runUrl})</sub>`;
+
+            // Find existing comment to update (avoid duplicate comments)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes('Performance Quality Gate'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if quality gate did not pass
+        if: steps.quality-gate.outputs.gate_passed != 'true'
+        run: |
+          echo "::error::Performance quality gate FAILED (exit code: ${{ steps.quality-gate.outputs.exit_code }})"
+          echo "Review the performance report artifact for threshold details."
+          exit 1

@@ -1,0 +1,20 @@
+{
+  "client": "_reference",
+  "version": "0.1.0",
+  "environment": "staging",
+  "endpoints": {
+    "api": {
+      "baseUrl": "https://httpbin.org",
+      "timeout": 15000,
+      "auth": {
+        "type": "bearer",
+        "loginUrl": "/post",
+        "tokenPath": "json.access_token"
+      }
+    }
+  },
+  "tags": {
+    "client": "_reference",
+    "environment": "staging"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "metrics": {
+    "http_req_duration": {
+      "type": "trend",
+      "avg": 150.5,
+      "min": 20,
+      "med": 120,
+      "max": 3000,
+      "p(90)": 350,
+      "p(95)": 500,
+      "p(99)": 1200
+    },
+    "http_reqs": {
+      "type": "counter",
+      "count": 5000,
+      "rate": 100.0
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "value": 0.002,
+      "passes": 10,
+      "fails": 4990
+    },
+    "checks": {
+      "type": "rate",
+      "passes": 4990,
+      "fails": 10
+    },
+    "iterations": {
+      "type": "counter",
+      "count": 1000,
+      "rate": 20
+    },
+    "vus_max": {
+      "type": "gauge",
+      "max": 50,
+      "value": 50
+    },
+    "data_sent": {
+      "type": "counter",
+      "count": 102400
+    },
+    "data_received": {
+      "type": "counter",
+      "count": 204800
+    },
+    "custom_my_metric": {
+      "type": "trend",
+      "avg": 42,
+      "count": 100,
+      "p(95)": 80
+    }
+  },
+  "root_group": {
+    "groups": {
+      "checkout_flow": {
+        "checks": {
+          "is_status_200": { "name": "is_status_200", "passes": 100, "fails": 0 }
+        }
+      }
+    },
+    "checks": {
+      "is_status_200": {
+        "name": "is_status_200",
+        "passes": 4990,
+        "fails": 10
+      }
+    }
+  }
+}

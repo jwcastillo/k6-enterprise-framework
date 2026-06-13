@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/data-pool-config/v1",
+  "title": "k6 Enterprise Framework — Data Pool Configuration Schema",
+  "description": "Schema for data pool configuration stored in clients/{name}/config/data-pool.json",
+  "type": "object",
+  "required": ["file", "exhaustionPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to data file relative to client data/ directory"
+    },
+    "keyField": {
+      "type": "string",
+      "description": "Column or field to use as unique key"
+    },
+    "exhaustionPolicy": {
+      "type": "string",
+      "enum": ["recycle", "generate", "stop"],
+      "description": "Exhaustion policy when all records have been consumed (recycle: restart, generate: create new, stop: halt VU)"
+    },
+    "maxRecords": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum records to load (0 = all)"
+    }
+  }
+}

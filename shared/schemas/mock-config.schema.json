@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/mock-config/v1",
+  "title": "k6 Enterprise Framework — Mock Server Configuration Schema",
+  "description": "Schema for mock server endpoint configuration stored in clients/{name}/mocks/{dependency}.json",
+  "type": "object",
+  "required": ["name", "endpoints"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Dependency name (e.g., 'payments-api')"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "Port to listen on (0 for auto-assign)"
+    },
+    "endpoints": {
+      "type": "array",
+      "description": "Mock endpoint definitions",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "method", "response"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "URL path pattern (e.g., '/api/users', '/api/users/:id')"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+            "description": "HTTP method"
+          },
+          "response": {
+            "$ref": "#/definitions/MockResponseTemplate"
+          },
+          "errorRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Error rate as decimal (0.0 to 1.0) — fraction of requests that return error"
+          },
+          "errorResponse": {
+            "$ref": "#/definitions/MockResponseTemplate"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "LatencyConfig": {
+      "description": "Simulated latency — fixed value in ms or normal distribution",
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "description": "Fixed latency in milliseconds"
+        },
+        {
+          "type": "object",
+          "required": ["mean", "stddev"],
+          "additionalProperties": false,
+          "properties": {
+            "mean": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Mean latency in milliseconds"
+            },
+            "stddev": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Standard deviation in milliseconds"
+            }
+          }
+        }
+      ]
+    },
+    "MockResponseTemplate": {
+      "type": "object",
+      "required": ["status", "body"],
+      "additionalProperties": false,
+      "description": "Response template with dynamic variable support",
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "HTTP status code"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Response headers"
+        },
+        "body": {
+          "description": "Response body template (string or object). Supports dynamic variables: {{counter}}, {{timestamp}}, {{uuid}}, {{randomInt(min,max)}}",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "object" }
+          ]
+        },
+        "latency": {
+          "$ref": "#/definitions/LatencyConfig"
+        }
+      }
+    }
+  }
+}

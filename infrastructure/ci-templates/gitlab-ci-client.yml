@@ -1,0 +1,107 @@
+# T-038 / T-140: GitLab CI template for running tests with a separate client repo
+# Copy this to your client repo as .gitlab-ci.yml
+#
+# ── Security (T-140 / CHK-SEC-047) ────────────────────────────────────────────
+# DO:
+#   - Store secrets in GitLab CI/CD Variables (Settings → CI/CD → Variables)
+#   - Mark sensitive variables as "Masked" and "Protected" in GitLab UI
+#   - Use masked: true for all variables containing tokens/passwords
+#   - Pin image digests for supply-chain security in production
+#
+# DON'T:
+#   - Echo or print CI variables that contain secrets
+#   - Write secrets to files unless strictly necessary (use env vars directly)
+#   - Expose variables to merge request pipelines from forks (use protected branches)
+#   - Use expand_vars: true with user-controlled input
+#
+# ── Prerequisites ──────────────────────────────────────────────────────────────
+# GitLab CI/CD Variables (Settings → CI/CD → Variables) — mark as Masked + Protected:
+#   K6_FRAMEWORK_TOKEN      Deploy Token with read_repository scope for framework repo
+#   K6_FRAMEWORK_REPO_URL   e.g. https://gitlab.com/org/k6-enterprise-framework.git
+#   APP_API_KEY             Target application API key (if required by your test)
+#   APP_PASSWORD            Target application password (if required by your test)
+
+stages:
+  - test
+
+variables:
+  K6_CLIENT: ${CI_PROJECT_NAME}
+  K6_PROFILE: smoke
+  K6_ENV: staging
+  # T-140: Disable variable expansion for user-controlled values
+  GIT_DEPTH: "1"
+
+.k6-base:
+  image: node:20-bullseye
+  before_script:
+    # Install k6
+    - apt-get update -qq && apt-get install -y -qq gnupg2 curl
+    - curl -fsSL https://dl.k6.io/key.gpg | gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main"
+      > /etc/apt/sources.list.d/k6.list
+    - apt-get update -qq && apt-get install -y -qq k6
+    # Clone framework — T-140: token passed via URL userinfo, never echoed
+    # GitLab masks the token in logs automatically when marked as Masked variable
+    - git clone --depth 1
+      "https://deploy-token:${K6_FRAMEWORK_TOKEN}@${K6_FRAMEWORK_REPO_URL#https://}"
+      /framework
+    # Link client into framework
+    - ln -s "${CI_PROJECT_DIR}" "/framework/clients/${K6_CLIENT}"
+    - cd /framework && npm ci --quiet
+
+k6:smoke:
+  extends: .k6-base
+  stage: test
+  variables:
+    K6_PROFILE: smoke
+  script:
+    - cd /framework
+    # T-140: Secrets passed as env vars to the process — not as CLI arguments.
+    # run-test.sh suppresses printing of TOKEN/SECRET/PASSWORD/KEY vars via log_debug_safe().
+    - APP_API_KEY="${APP_API_KEY}" APP_PASSWORD="${APP_PASSWORD}"
+      ./bin/run-test.sh
+      --client "${K6_CLIENT}"
+      --scenario api/smoke-users
+      --profile smoke
+      --env "${K6_ENV}"
+    # T-140: Post-execution — scan report artifacts for accidental secret leakage
+    - |
+      REPORT_DIR="/framework/reports/${K6_CLIENT}"
+      if [[ -d "${REPORT_DIR}" ]]; then
+        LEAKED=$(grep -rEl \
+          'Bearer [A-Za-z0-9_\-]{20,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}' \
+          "${REPORT_DIR}" 2>/dev/null || true)
+        if [[ -n "${LEAKED}" ]]; then
+          echo "WARNING: Potential secret pattern in report artifacts: ${LEAKED}"
+        fi
+      fi
+  artifacts:
+    when: always
+    paths:
+      - /framework/reports/${K6_CLIENT}/
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+k6:load:
+  extends: .k6-base
+  stage: test
+  variables:
+    K6_PROFILE: load
+  script:
+    - cd /framework
+    - APP_API_KEY="${APP_API_KEY}" APP_PASSWORD="${APP_PASSWORD}"
+      ./bin/run-test.sh
+      --client "${K6_CLIENT}"
+      --scenario api/smoke-users
+      --profile load
+      --env "${K6_ENV}"
+  artifacts:
+    when: always
+    paths:
+      - /framework/reports/${K6_CLIENT}/
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual

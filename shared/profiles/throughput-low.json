@@ -1,0 +1,16 @@
+{
+  "name": "throughput-low",
+  "description": "Low constant throughput (10 req/s) — arrival-rate open model",
+  "executor": "constant-arrival-rate",
+  "rate": 10,
+  "timeUnit": "1s",
+  "duration": "5m",
+  "preAllocatedVUs": 20,
+  "maxVUs": 50,
+  "thresholds": {
+    "http_req_duration": ["p(95)<2000", "p(99)<5000"],
+    "http_req_failed": ["rate<0.05"],
+    "checks": ["rate>=0.95"]
+  },
+  "maxDuration": "6m"
+}
