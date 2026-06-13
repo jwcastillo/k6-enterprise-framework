@@ -1,0 +1,4 @@
+# Anchors this repo as its own pnpm workspace root so installs don't get
+# captured by a stray pnpm-workspace.yaml in an ancestor directory.
+packages:
+  - .
