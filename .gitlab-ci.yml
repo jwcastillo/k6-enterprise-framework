@@ -1,0 +1,140 @@
+# T-140: k6 Enterprise Framework — Self-test GitLab CI pipeline
+#
+# Security controls:
+# - Secrets defined as masked/protected CI/CD variables in GitLab UI, never in this file
+# - K6_PROFILE and other inputs validated with regex before shell use
+# - detect-secrets job blocks pipeline if credentials are found in source
+# - k6 installed from official signed repository (not arbitrary binary)
+
+stages:
+  - validate
+  - build
+  - test
+
+variables:
+  # Shallow clone for speed
+  GIT_DEPTH: "1"
+  # Non-sensitive defaults (override in CI/CD variables if needed)
+  K6_CLIENT: "_reference"
+  K6_ENV: "default"
+  K6_PROFILE: "smoke"
+  K6_SCENARIO: "api/smoke-users"
+
+# ── Stage 1: Detect hardcoded secrets ──────────────────────────────────────
+detect-secrets:
+  stage: validate
+  image: node:20-alpine
+  timeout: 5 minutes
+  script:
+    # corepack reads packageManager from package.json (pinned to pnpm@11) and
+    # auto-activates the matching version. Fallback: explicit pnpm@11 install.
+    - corepack enable || npm install -g pnpm@11
+    - pnpm install --ignore-workspace --frozen-lockfile
+    - node bin/testing/detect-secrets.js
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH =~ /^001-/
+
+# ── Stage 2: Lint, typecheck, and build ───────────────────────────────────
+build:
+  stage: build
+  image: node:20-alpine
+  timeout: 10 minutes
+  script:
+    - corepack enable || npm install -g pnpm@11
+    - pnpm install --ignore-workspace --frozen-lockfile
+    # LINT-04 zero-tolerance gate: tracked surface only.
+    # --max-warnings 0 + --error-on-unmatched-pattern is the same form as GH Actions
+    # so the local synthetic probe is bit-for-bit symmetrical to CI.
+    # --error-on-unmatched-pattern defends against gitignore drift causing the glob
+    # to match nothing (false-green scenario).
+    - pnpm exec eslint 'src/**/*.ts' 'clients/**/*.ts' --max-warnings 0 --error-on-unmatched-pattern
+    - pnpm exec tsc --noEmit
+    - pnpm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH =~ /^001-/
+
+# ── Stage 3: Unit tests with coverage enforcement (Phase 3 COV-08 + COV-09) ─
+# Vitest with threshold enforcement (60/55/60/60) across Node 18/20/22.
+# The coverage step exits non-zero when thresholds are violated.
+unit-test:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  timeout: 15 minutes
+  parallel:
+    matrix:
+      - NODE_VERSION: ["18", "20", "22"]
+  script:
+    - corepack enable || npm install -g pnpm@11
+    - pnpm install --ignore-workspace --frozen-lockfile
+    # Coverage step also runs unit tests AND enforces thresholds.
+    - pnpm run test:coverage
+  artifacts:
+    when: always
+    paths:
+      - coverage/
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── Stage 3: Smoke test ────────────────────────────────────────────────────
+smoke-test:
+  stage: test
+  image: node:20-bullseye
+  timeout: 15 minutes
+  needs:
+    - job: build
+      artifacts: true
+  before_script:
+    # Install k6 from official signed repository
+    - apt-get update -qq
+    - apt-get install -y -qq gnupg curl
+    - curl -fsSL https://dl.k6.io/key.gpg
+        | gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg]
+        https://dl.k6.io/deb stable main"
+        > /etc/apt/sources.list.d/k6.list
+    - apt-get update -qq && apt-get install -y -qq k6
+    - corepack enable || npm install -g pnpm@11
+    - pnpm install --ignore-workspace --frozen-lockfile
+  script:
+    # T-140: Validate inputs before use in shell commands
+    - |
+      if [[ ! "${K6_PROFILE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "ERROR: Invalid K6_PROFILE value: ${K6_PROFILE}" >&2
+        exit 1
+      fi
+      if [[ ! "${K6_SCENARIO}" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
+        echo "ERROR: Invalid K6_SCENARIO value: ${K6_SCENARIO}" >&2
+        exit 1
+      fi
+    - >
+      ./bin/run-test.sh
+      --client "${K6_CLIENT}"
+      --scenario "${K6_SCENARIO}"
+      --profile "${K6_PROFILE}"
+      --env "${K6_ENV}"
+  variables:
+    # Non-sensitive configuration — safe to define here
+    K6_SECRETS_BACKENDS: "env"
+    # Sensitive application secrets: define as masked+protected CI/CD variables in GitLab UI
+    # Menu: Settings > CI/CD > Variables > Add variable (check Masked + Protected)
+    # Do NOT define APP_API_KEY or APP_PASSWORD here as literal values.
+    # They will be available as environment variables automatically if configured in GitLab.
+  artifacts:
+    when: always
+    paths:
+      - reports/
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH =~ /^001-/

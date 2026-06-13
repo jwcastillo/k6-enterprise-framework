@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "summary": {
+    "metrics": {
+      "http_req_duration": {
+        "avg": 130,
+        "p(95)": 260,
+        "p(99)": 520
+      },
+      "http_req_failed": {
+        "rate": 0.001
+      }
+    }
+  }
+}

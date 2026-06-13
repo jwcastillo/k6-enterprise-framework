@@ -1,0 +1,107 @@
+# k6 Enterprise Framework — Helm chart default values
+# T-174 (Phase 8): Three commented examples for different deployment scenarios.
+#
+# Override with: --set key=value or -f custom-values.yaml
+#
+# ── Example 1: Single-node (development/CI) ───────────────────────────────────
+# Minimal setup: 1 pod, smoke profile, no persistence.
+# Use: helm install k6 ./k6-enterprise -f values.yaml
+#
+# ── Example 2: Multi-node (load/stress test) ─────────────────────────────────
+# Scale to N pods for high-throughput testing.
+# Use: helm install k6 ./k6-enterprise --set test.parallelism=8 \
+#        --set runner.resources.limits.cpu=4000m \
+#        --set runner.env.K6_PROFILE=load
+#
+# ── Example 3: With observability (Prometheus + Grafana) ─────────────────────
+# Full observability: metrics pushed to Prometheus remote write.
+# Use: helm install k6 ./k6-enterprise \
+#        --set runner.env.K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write \
+#        --set persistence.enabled=true
+#
+# ── Image ─────────────────────────────────────────────────────────────────────
+image:
+  repository: grafana/k6
+  tag: "0.54.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# ── Test configuration ────────────────────────────────────────────────────────
+test:
+  # Name of the TestRun resource
+  name: k6-load-test
+  namespace: k6-tests
+
+  # Number of parallel k6 runner pods
+  parallelism: 2
+
+  # Script source — ConfigMap containing the compiled JS bundle
+  script:
+    configMap:
+      name: k6-scripts
+      file: scenario.js
+
+# ── Runner pod configuration ──────────────────────────────────────────────────
+runner:
+  serviceAccountName: k6-runner
+
+  # Resource requests and limits per pod
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "1Gi"
+
+  # Environment variables injected into each runner pod
+  # Secrets should be referenced via envFrom.secretRef (see below)
+  env:
+    K6_PROFILE: smoke
+    K6_ENV: staging
+    K6_CLIENT: my-team
+    K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+
+  # T-132: Reference a Kubernetes Secret for ALL sensitive values.
+  # NEVER put tokens, passwords, or API keys in the env block above as literal values.
+  # Create the secret BEFORE deploying this chart:
+  #   kubectl create secret generic k6-secrets \
+  #     --from-literal=APP_API_KEY=<value> \
+  #     --from-literal=APP_PASSWORD=<value> \
+  #     -n k6-tests
+  # The chart mounts all keys from this secret as env vars in runner pods.
+  envFromSecret:
+    name: k6-secrets # set to "" to disable secret mounting
+
+  # Node selector for runner pods
+  nodeSelector: {}
+
+  # Tolerations for runner pods
+  tolerations: []
+
+  # Affinity rules
+  affinity: {}
+
+# ── RBAC ──────────────────────────────────────────────────────────────────────
+rbac:
+  create: true
+  serviceAccount:
+    create: true
+    name: k6-runner
+    annotations: {}
+
+# ── Prometheus remote write ───────────────────────────────────────────────────
+prometheus:
+  remoteWrite:
+    enabled: true
+    url: http://prometheus-operated:9090/api/v1/write
+
+# ── Output ────────────────────────────────────────────────────────────────────
+# Mount a PVC to persist reports across runs
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteMany
+  size: 5Gi
+  mountPath: /reports

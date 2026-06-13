@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "k6 Enterprise Framework — Metrics Engine Configuration",
+  "description": "Controls which metric domains the MetricsEngine activates per profile/client (T-180 criterion 7)",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "description": "Metric domain calculators to activate. Use 'all' or list specific domains.",
+      "oneOf": [
+        { "type": "string", "enum": ["all"] },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "performance",
+              "throughput",
+              "error",
+              "saturation",
+              "sla",
+              "stability",
+              "scalability",
+              "chaos",
+              "security",
+              "observability",
+              "data-integrity"
+            ]
+          }
+        }
+      ],
+      "default": ["performance", "throughput", "error", "sla"]
+    },
+    "prometheus": {
+      "description": "Prometheus API endpoint for fetching external SUT metrics.",
+      "type": "object",
+      "properties": {
+        "url":          { "type": "string", "description": "e.g. http://prometheus:9090" },
+        "enabled":      { "type": "boolean", "default": false },
+        "queryTimeout": { "type": "integer", "default": 10, "description": "Seconds" }
+      }
+    },
+    "slo": {
+      "description": "SLO targets used by the SLA calculator.",
+      "type": "object",
+      "properties": {
+        "availabilityTarget":   { "type": "number", "minimum": 0, "maximum": 1, "default": 0.999, "description": "e.g. 0.999 = 99.9%" },
+        "latencyP95TargetMs":   { "type": "integer", "default": 500 },
+        "latencyP99TargetMs":   { "type": "integer", "default": 1000 },
+        "throughputTargetRps":  { "type": "number",  "description": "Minimum acceptable RPS; omit to skip" },
+        "errorBudgetWindowDays":{ "type": "integer", "default": 30 }
+      }
+    },
+    "profiles": {
+      "description": "Per-load-profile metric domain overrides.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "oneOf": [
+              { "type": "string", "enum": ["all"] },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "smoke":  { "enabled": ["performance", "error"] },
+          "load":   { "enabled": ["performance", "throughput", "error", "sla"] },
+          "stress": { "enabled": ["performance", "throughput", "error", "sla", "saturation"] },
+          "soak":   { "enabled": "all" }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "enabled": ["performance", "throughput", "error", "sla"],
+      "prometheus": {
+        "url": "http://prometheus:9090",
+        "enabled": true,
+        "queryTimeout": 10
+      },
+      "slo": {
+        "availabilityTarget": 0.999,
+        "latencyP95TargetMs": 500,
+        "latencyP99TargetMs": 1000,
+        "errorBudgetWindowDays": 30
+      },
+      "profiles": {
+        "smoke":  { "enabled": ["performance", "error"] },
+        "soak":   { "enabled": "all" }
+      }
+    }
+  ]
+}

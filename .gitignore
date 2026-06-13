@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.standalone
+
+# Per-client secrets (envs/<client>.env — gitignored; envs/<client>.env.example — tracked)
+envs/*.env
+!envs/*.env.example
+
+# Client layers (each client lives in its own repo, linked via submodule or CI clone)
+clients/*/
+!clients/_reference/
+!clients/_benchmark/
+!clients/examples/
+
+# Reports (generated artifacts)
+reports/
+
+# Test coverage
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker secrets files (T-150 — never commit plaintext secrets)
+infrastructure/secrets/
+infrastructure/docker-compose.override.yml
+
+# Backups
+*.bak
+*.bak2
+*.backup
+*.orig
+
+# Generated datasets and test data (large files, local only)
+data/
+
+# k6 outputs
+k6-results*.json
+summary*.json
+
+# Logs
+*.log
+
+tmp/
+
+# Docusaurus
+docs-site/node_modules/
+docs-site/build/
+docs-site/.docusaurus/
+
+# Local agent / planning artifacts (internal, not part of the framework)
+.planning/
+.claude/settings.local.json
+.agents/

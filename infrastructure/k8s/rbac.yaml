@@ -1,0 +1,74 @@
+# T-131: Kubernetes RBAC for k6 distributed test runners
+# Namespace: k6-tests
+#
+# Apply with:
+#   kubectl apply -f infrastructure/k8s/rbac.yaml
+#
+# Security controls:
+# - ServiceAccount scoped to k6-tests namespace only
+# - Role grants least-privilege access (no cluster-wide permissions)
+# - Secrets access restricted to named secret 'k6-secrets' only
+# - No ability to create, modify, or delete other resources
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k6-tests
+  labels:
+    app.kubernetes.io/managed-by: k6-enterprise-framework
+    security.k6.io/isolation: "true"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k6-runner
+  namespace: k6-tests
+  labels:
+    app: k6-runner
+    app.kubernetes.io/component: load-test-runner
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k6-runner-role
+  namespace: k6-tests
+rules:
+  # Read-only access to the named secrets used for test credentials
+  # Restrict to specific secret names — never use '*' for secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames: ["k6-secrets"]
+
+  # Read ConfigMaps that contain test scripts
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+  # k6 operator TestRun CRDs — full lifecycle for the operator to manage
+  - apiGroups: ["k6.io"]
+    resources: ["testruns", "testruns/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Read pod status (for operator coordination)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k6-runner-rolebinding
+  namespace: k6-tests
+subjects:
+  - kind: ServiceAccount
+    name: k6-runner
+    namespace: k6-tests
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: k6-runner-role

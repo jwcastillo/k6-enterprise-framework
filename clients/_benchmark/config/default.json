@@ -1,0 +1,16 @@
+{
+  "client": "_benchmark",
+  "version": "0.1.0",
+  "description": "Internal benchmark client for measuring framework overhead",
+  "environment": "default",
+  "endpoints": {
+    "mock": {
+      "baseUrl": "http://127.0.0.1:9999",
+      "timeout": 5000
+    }
+  },
+  "tags": {
+    "client": "_benchmark",
+    "environment": "default"
+  }
+}

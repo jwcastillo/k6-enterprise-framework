@@ -1,0 +1,15 @@
+{
+  "name": "quick",
+  "description": "Quick load (5 VUs, 3 min) — fast feedback for CI/CD pipelines",
+  "stages": [
+    { "duration": "30s", "target": 5 },
+    { "duration": "2m",  "target": 5 },
+    { "duration": "30s", "target": 0 }
+  ],
+  "thresholds": {
+    "http_req_duration": ["p(95)<1500", "p(99)<3000"],
+    "http_req_failed": ["rate<0.05"],
+    "checks": ["rate>=0.95"]
+  },
+  "maxDuration": "5m"
+}

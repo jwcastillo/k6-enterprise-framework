@@ -1,0 +1,143 @@
+# T-131 / T-174 (Phase 8): k6 TestRun CRD template for k6-operator
+# T-174: Each field documented with inline comment explaining purpose and guidance.
+#
+# Credentials are passed via Kubernetes Secrets (never as literal values).
+# Use run-distributed.sh for automated workflow (see bin/run-distributed.sh --help).
+#
+# Prerequisites:
+#   # 1. Install k6-operator (if not already present)
+#   kubectl apply -f https://raw.githubusercontent.com/grafana/k6-operator/main/bundle.yaml
+#
+#   # 2. Apply RBAC
+#   kubectl apply -f infrastructure/k8s/rbac.yaml
+#
+#   # 3. Create secrets namespace
+#   kubectl create namespace k6-tests
+#
+#   # 4. Create secrets (NEVER store values in this file)
+#   kubectl create secret generic k6-secrets \
+#     --from-literal=APP_API_KEY=<value> \
+#     --from-literal=APP_PASSWORD=<value> \
+#     -n k6-tests
+#
+#   # 5. Deploy compiled test script as ConfigMap
+#   kubectl create configmap k6-scripts \
+#     --from-file=scenario.js=dist/reference/api/smoke-users.js \
+#     -n k6-tests
+#
+# Apply with:
+#   kubectl apply -f infrastructure/k8s/k6-testrun.yaml
+#
+# Monitor per-pod status:
+#   kubectl get pods -n k6-tests -l app=k6-runner -w
+#   kubectl get testrun k6-load-test -n k6-tests -o jsonpath='{.status.stage}'
+#
+# Stream logs from all runner pods:
+#   kubectl logs -n k6-tests -l app=k6-runner -f
+
+---
+apiVersion: k6.io/v1alpha1 # k6-operator API group and version
+kind: TestRun # CRD type — represents one distributed test run
+metadata:
+  name: k6-load-test # Unique name for this TestRun resource
+  namespace: k6-tests # Kubernetes namespace (must exist before apply)
+  labels:
+    app: k6-runner # Used to select runner pods for log streaming
+    test.k6.io/profile: smoke # Informational: load profile applied
+    test.k6.io/client: my-client # Informational: framework client identifier
+spec:
+  # parallelism: number of parallel k6 runner pods to create (default: 1)
+  # Each pod receives totalVUs / parallelism virtual users.
+  # Recommended: use 1 for debugging, 4-8 for load/stress, 16+ for breakpoint.
+  parallelism: 2
+
+  # script: source of the compiled k6 JavaScript bundle
+  # Must be a ConfigMap key containing the scenario.js output of 'npm run build'.
+  script:
+    configMap:
+      name: k6-scripts # Name of the ConfigMap created in step 5 above
+      file: scenario.js # Key within the ConfigMap (filename used in --from-file)
+
+  runner:
+    # serviceAccountName: Kubernetes service account for runner pods
+    # Must have permission to read secrets in this namespace (see rbac.yaml).
+    serviceAccountName: k6-runner
+
+    # image: custom k6 Docker image with extensions/plugins (optional)
+    # Omit to use the default grafana/k6 image from the operator.
+    # Build with: docker build -f infrastructure/k8s/Dockerfile -t <registry>/k6:tag .
+    # image: registry.example.com/k6-custom:latest
+
+    # securityContext: hardened pod security — non-root, read-only filesystem
+    # Do NOT relax these unless your k6 scenario explicitly requires filesystem writes.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534 # nobody — minimises attack surface
+      runAsGroup: 65534
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL # Drop all Linux capabilities
+
+    # resources: CPU/memory per pod
+    # Increase limits for high-VU tests; keep requests low for scheduler flexibility.
+    # Rule of thumb: 100m CPU + 128Mi RAM per 50 VUs for typical HTTP scenarios.
+    resources:
+      requests:
+        cpu: "100m" # Minimum guaranteed CPU per pod
+        memory: "128Mi" # Minimum guaranteed memory per pod
+      limits:
+        cpu: "500m" # Maximum CPU — raise for CPU-intensive scenarios
+        memory: "512Mi" # Maximum memory — raise for large data-driven scenarios
+
+    # env: environment variables injected into each runner pod
+    # Non-sensitive values: use `value:` directly.
+    # Sensitive values (tokens, passwords, keys): ALWAYS use `secretKeyRef`.
+    env:
+      - name: K6_CLIENT
+        value: "my-client" # Non-sensitive: matches your clients/ directory name
+
+      - name: K6_PROFILE
+        value: "smoke" # Non-sensitive: smoke|quick|load|stress|breakpoint|soak
+
+      - name: K6_ENV
+        value: "staging" # Non-sensitive: default|staging|production
+
+      - name: K6_SECRETS_BACKENDS
+        value: "env" # Non-sensitive: secrets source (env|vault|aws-sm|azure-kv)
+
+      - name: K6_EXECUTION_MODE
+        value: "distributed" # Non-sensitive: enables distributed-mode behaviour in framework
+
+      # Sensitive values: ALWAYS use secretKeyRef — never `value:` for tokens/passwords
+      - name: APP_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: k6-secrets # Secret name (created in step 4 above)
+            key: APP_API_KEY # Key within the secret
+
+      - name: APP_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: k6-secrets
+            key: APP_PASSWORD
+
+    # imagePullSecrets: required when using a private container registry
+    # Create with: kubectl create secret docker-registry registry-credentials \
+    #   --docker-server=registry.example.com --docker-username=... --docker-password=...
+    # Uncomment to enable:
+    # imagePullSecrets:
+    #   - name: registry-credentials
+
+  # starter: one-time pod that initialises the test run before runner pods start
+  # Applies the same security context as runner pods.
+  starter:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL

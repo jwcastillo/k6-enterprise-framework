@@ -1,0 +1,162 @@
+# OBS2-01 / Phase 08-04: Kubernetes Service + Deployment for OTel Collector.
+#
+# Workload kind is Deployment (per ROADMAP Phase 08 Success Criterion #3) — NOT
+# DaemonSet (the collector serves cluster-wide ingress, no need for one-per-node)
+# and NOT Sidecar (would couple the collector lifecycle to each k6 pod and defeat
+# the centralization goal).
+#
+# Image otel/opentelemetry-collector-contrib:0.152.0 matches the docker-compose pin
+# in infrastructure/.env.example (08-01). Tag-only pinning is intentional for this
+# phase; digest pinning is a milestone-level SEC follow-up shared with the other
+# observability images (Tempo, Pyroscope, Loki, Prometheus, Grafana).
+#
+# Pod hardening replicates the SEC-07 baseline established by infrastructure/k8s/
+# k6-testrun.yaml (runAsNonRoot, runAsUser 65534, allowPrivilegeEscalation false,
+# readOnlyRootFilesystem true, capabilities.drop ALL).
+#
+# Replicas default to 1; scale via `kubectl scale deploy/otel-collector --replicas=N`
+# for HA. Service.type ClusterIP gives a stable VIP regardless of replica count.
+#
+# Apply order (ConfigMap MUST precede Deployment):
+#   kubectl apply -f infrastructure/k8s/otel-collector-configmap.yaml \
+#                 -f infrastructure/k8s/otel-collector-deployment.yaml \
+#                 -n k6-tests
+#
+# Operator prerequisite: Tempo and Prometheus Services must exist in the cluster
+# for end-to-end trace/metric delivery — the collector's Readiness gate (HTTP GET
+# on :13133 health_check extension) is decoupled from those backends and reflects
+# only the collector's own pipeline boot, not exporter reachability.
+#
+# Out of scope for this plan: NetworkPolicy (operators in restrictive clusters add
+# their own) and a dedicated ServiceAccount (default SA in k6-tests is sufficient
+# for PSA baseline; PSA-restricted clusters add an SA + RoleBinding separately).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: k6-tests
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/component: telemetry-ingress
+    app.kubernetes.io/part-of: k6-enterprise-framework
+spec:
+  type: ClusterIP
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+    - name: health-check
+      port: 13133
+      targetPort: 13133
+      protocol: TCP
+    - name: self-metrics
+      port: 8888
+      targetPort: 8888
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: k6-tests
+  labels:
+    app: otel-collector
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/component: telemetry-ingress
+    app.kubernetes.io/part-of: k6-enterprise-framework
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/component: telemetry-ingress
+        app.kubernetes.io/part-of: k6-enterprise-framework
+      annotations:
+        # Operator-managed: substitute sha256(otel-collector-config.data.config.yaml)
+        # via Kustomize / Helm / CI before apply so config rotation triggers a pod
+        # restart visible in `kubectl rollout history deploy/otel-collector`.
+        checksum/config: "REPLACE_ON_APPLY"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.152.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config=/etc/otelcol-contrib/config.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: health-check
+              containerPort: 13133
+              protocol: TCP
+            - name: self-metrics
+              containerPort: 8888
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-contrib
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+            items:
+              - key: config.yaml
+                path: config.yaml

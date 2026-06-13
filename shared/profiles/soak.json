@@ -1,0 +1,15 @@
+{
+  "name": "soak",
+  "description": "Soak testing — sustained load over extended period to detect memory leaks and drift",
+  "stages": [
+    { "duration": "5m",  "target": 20  },
+    { "duration": "4h",  "target": 20  },
+    { "duration": "5m",  "target": 0   }
+  ],
+  "thresholds": {
+    "http_req_duration": ["p(95)<1500", "p(99)<3000"],
+    "http_req_failed": ["rate<0.05"],
+    "checks": ["rate>=0.95"]
+  },
+  "maxDuration": "4h30m"
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/slo-config/v1",
+  "title": "k6 Enterprise Framework — SLO Configuration Schema",
+  "description": "Schema for SLO (Service Level Objective) definitions stored in clients/{name}/config/slos.json",
+  "type": "object",
+  "required": ["services"],
+  "additionalProperties": false,
+  "properties": {
+    "services": {
+      "type": "array",
+      "description": "SLO definitions per service",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["serviceName", "metrics"],
+        "additionalProperties": false,
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Service identifier (matches test tags or endpoint name)"
+          },
+          "metrics": {
+            "type": "array",
+            "description": "SLO metrics for this service",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "target", "riskMargin"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Metric name (e.g., 'http_req_duration_p95', 'error_rate')"
+                },
+                "target": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Target value (upper bound for latency, upper bound for error rate)"
+                },
+                "riskMargin": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Risk margin as decimal (0.10 = 10% — values within margin of target are 'en_riesgo')"
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Unit for display purposes (e.g., 'ms', '%')"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

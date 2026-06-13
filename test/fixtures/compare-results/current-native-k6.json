@@ -1,0 +1,16 @@
+{
+  "metrics": {
+    "http_req_duration": {
+      "values": {
+        "avg": 105,
+        "p(95)": 210,
+        "p(99)": 420
+      }
+    },
+    "iterations": {
+      "values": {
+        "count": 510
+      }
+    }
+  }
+}

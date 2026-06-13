@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# T-070: Pre-commit hook — TypeScript type-check + secret detection on staged files
+# Bypass: git commit --no-verify (emergency only)
+. "$(dirname "$0")/_/husky.sh"
+
+cd k6-framework && npx lint-staged

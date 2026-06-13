@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "T-071: Renovate — automated dependency updates for GitLab repositories",
+  "extends": ["config:base"],
+  "schedule": ["every monday"],
+  "labels": ["dependencies", "automated"],
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "minor and patch updates",
+      "groupSlug": "minor-patch"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "enabled": true,
+      "addLabels": ["breaking-change"],
+      "automerge": false
+    },
+    {
+      "matchPackagePatterns": ["*"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "high-priority"],
+    "assignees": [],
+    "prPriority": 10
+  },
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 4,
+  "npm": {
+    "minimumReleaseAge": "3 days"
+  },
+  "ignorePaths": ["**/node_modules/**", "**/dist/**"]
+}

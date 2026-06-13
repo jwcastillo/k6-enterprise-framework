@@ -1,0 +1,160 @@
+# perf-smoke.yml — Manual performance smoke test via GitHub Actions UI
+#
+# Trigger: workflow_dispatch (manual from GitHub Actions UI or via API)
+#
+# Usage via API (curl):
+#   curl -X POST \
+#     -H "Authorization: token $GITHUB_PAT" \
+#     -H "Accept: application/vnd.github.v3+json" \
+#     https://api.github.com/repos/<owner>/<repo>/actions/workflows/perf-smoke.yml/dispatches \
+#     -d '{"ref":"main","inputs":{"client":"_reference","env":"staging","profile":"smoke"}}'
+#
+# Secrets required (set in repo Settings → Secrets and variables → Actions):
+#   PERF_SLACK_WEBHOOK    — Slack incoming webhook URL (optional)
+#   PERF_EMAIL_TO         — Email notification recipient (optional)
+#   PERF_NOTIFY_WEBHOOK   — Generic webhook URL (optional)
+
+name: Performance Smoke Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      client:
+        description: "Client name (directory under clients/)"
+        required: true
+        default: "_reference"
+      env:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - local
+          - staging
+          - production
+      test:
+        description: "Test file path (relative to client scenarios/)"
+        required: false
+        default: ""
+      profile:
+        description: "Load profile"
+        required: true
+        default: "smoke"
+        type: choice
+        options:
+          - smoke
+          - load
+          - stress
+          - soak
+          - breakpoint
+      notify:
+        description: "Notification channels"
+        required: false
+        default: "none"
+        type: choice
+        options:
+          - none
+          - slack
+          - email
+          - slack,email
+
+# Prevent concurrent smoke runs for the same client
+concurrency:
+  group: perf-smoke-${{ github.event.inputs.client }}-${{ github.event.inputs.env }}
+  cancel-in-progress: false
+
+jobs:
+  smoke-test:
+    name: Smoke — ${{ github.event.inputs.client }} / ${{ github.event.inputs.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "0.54.0"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: k6-framework/package-lock.json
+
+      - name: Install dependencies
+        working-directory: k6-framework
+        run: npm ci --prefer-offline
+
+      - name: Build TypeScript
+        working-directory: k6-framework
+        run: npm run build
+
+      - name: Validate client config
+        working-directory: k6-framework
+        run: |
+          node bin/validate-config.js \
+            --client="${{ github.event.inputs.client }}" \
+            --env="${{ github.event.inputs.env }}"
+
+      - name: Run smoke test
+        id: run-test
+        working-directory: k6-framework
+        env:
+          NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+          NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.PERF_NOTIFY_WEBHOOK }}
+        run: |
+          ARGS=(
+            "--client=${{ github.event.inputs.client }}"
+            "--env=${{ github.event.inputs.env }}"
+            "--profile=${{ github.event.inputs.profile }}"
+            "--notify=${{ github.event.inputs.notify }}"
+            "--out=json=reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.json"
+          )
+          if [[ -n "${{ github.event.inputs.test }}" ]]; then
+            ARGS+=("--test=${{ github.event.inputs.test }}")
+          fi
+          bash bin/run-test.sh "${ARGS[@]}"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Generate HTML report
+        if: always()
+        working-directory: k6-framework
+        run: |
+          node bin/generate-report.js \
+            --input "reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.json" \
+            --output "reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.html" \
+            --type smoke || true
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-report-${{ github.run_id }}
+          path: k6-framework/reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.*
+          retention-days: 30
+
+      - name: Post result summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const exitCode = '${{ steps.run-test.outputs.exit_code }}';
+            const status = exitCode === '0' ? '✅ PASS' : '❌ FAIL';
+            const summary = `## Performance Smoke Test — ${status}
+
+            | Field        | Value |
+            |---|---|
+            | Client       | \`${{ github.event.inputs.client }}\` |
+            | Environment  | \`${{ github.event.inputs.env }}\` |
+            | Profile      | \`${{ github.event.inputs.profile }}\` |
+            | Exit code    | \`${exitCode}\` |
+            | Run ID       | [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+            > Report attached as workflow artifact.`;
+
+            await core.summary.addRaw(summary).write();

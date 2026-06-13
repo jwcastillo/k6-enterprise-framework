@@ -1,0 +1,8 @@
+{
+  "label": "Clients",
+  "position": 20,
+  "link": {
+    "type": "generated-index",
+    "description": "Per-client documentation, scenarios, and configurations."
+  }
+}

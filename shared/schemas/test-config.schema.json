@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/test-config/v1",
+  "title": "k6 Enterprise Framework — Test Configuration Schema",
+  "description": "Schema for test configuration files (JSON or YAML) consumed by config-loader.ts",
+  "type": "object",
+  "required": ["name", "profile", "client", "script"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable test name (used in reports)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer description of what the test validates"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["smoke", "quick", "load", "rampup", "capacity", "stress", "spike", "breakpoint", "soak"],
+      "description": "Load profile to apply (maps to shared/profiles/<name>.json)"
+    },
+    "client": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "description": "Client directory name under clients/ (alphanumeric, dash, underscore)"
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["default", "staging", "production"],
+      "default": "default",
+      "description": "Target environment (maps to clients/<client>/config/<env>.json)"
+    },
+    "script": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to scenario script relative to clients/<client>/scenarios/ (no extension)"
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Custom tags applied to all metrics (merged with profile defaults)"
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "description": "Threshold overrides (merged with profile defaults, scenario wins)"
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backends": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["env", "vault", "aws-sm", "azure-kv"] },
+          "description": "Secrets resolution backends (priority order)"
+        }
+      },
+      "description": "Secrets configuration (backend selection)"
+    },
+    "options": {
+      "type": "object",
+      "description": "Raw k6 options to merge (use sparingly — prefer profile-based configuration)",
+      "additionalProperties": true
+    }
+  }
+}

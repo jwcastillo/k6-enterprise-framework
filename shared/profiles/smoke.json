@@ -1,0 +1,14 @@
+{
+  "name": "smoke",
+  "description": "Minimal load (1-2 VUs, 1 min) — verify system is operational before heavier tests",
+  "stages": [
+    { "duration": "30s", "target": 1 },
+    { "duration": "30s", "target": 0 }
+  ],
+  "thresholds": {
+    "http_req_duration": ["p(95)<2000"],
+    "http_req_failed": ["rate<0.01"],
+    "checks": ["rate>=0.99"]
+  },
+  "maxDuration": "2m"
+}

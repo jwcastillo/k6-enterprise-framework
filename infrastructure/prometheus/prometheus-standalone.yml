@@ -1,0 +1,38 @@
+# Prometheus configuration for standalone k6 client repos
+#
+# In standalone mode, k6 runs on the host (not in Docker) and pushes metrics
+# directly to Prometheus via remote-write. There is no k6 container to scrape.
+#
+# k6 integration:
+#   k6 run --out experimental-prometheus-rw \
+#     -e K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9090/api/v1/write \
+#     -e K6_PROMETHEUS_RW_TREND_STATS=avg,min,med,max,p(90),p(95),p(99) \
+#     dist/my-test.js
+#
+# The Prometheus server must be started with --web.enable-remote-write-receiver
+# to accept remote-write pushes (already configured in docker-compose.standalone.yml).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "k6-standalone"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Grafana health metrics
+  - job_name: "grafana"
+    static_configs:
+      - targets: ["grafana:3000"]
+
+  # Note: No k6-generator-health scrape job in standalone mode.
+  # k6 runs locally on the host and pushes metrics via remote-write,
+  # so there is no k6 container to scrape inside the Docker network.
+  #
+  # To verify metrics are being received, check:
+  #   http://localhost:9090/api/v1/targets  (Prometheus targets page)
+  #   http://localhost:9090/graph           (query: k6_http_reqs_total)

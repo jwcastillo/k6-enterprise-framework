@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "client": "{{CLIENT_NAME}}",
+  "description": "{{CLIENT_DESCRIPTION}}",
+  "services": {
+    "{{SERVICE_NAME}}": {
+      "baseUrl": "${__ENV.BASE_URL}",
+      "timeout": 10000,
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      }
+    }
+  },
+  "defaultProfile": "smoke",
+  "reporting": {
+    "branding": {
+      "clientName": "{{CLIENT_NAME}}",
+      "primaryColor": "#0066cc"
+    }
+  }
+}

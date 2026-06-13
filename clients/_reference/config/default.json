@@ -1,0 +1,15 @@
+{
+  "client": "_reference",
+  "version": "0.1.0",
+  "environment": "default",
+  "endpoints": {
+    "api": {
+      "baseUrl": "https://httpbin.org",
+      "timeout": 10000
+    }
+  },
+  "tags": {
+    "client": "_reference",
+    "environment": "default"
+  }
+}

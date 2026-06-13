@@ -1,0 +1,70 @@
+# k6 Enterprise Framework — Local development overrides example
+#
+# T-146: Customize for local development without modifying docker-compose.yml
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # Edit as needed, then:
+#   docker compose up -d
+#
+# Docker Compose automatically merges docker-compose.override.yml on top of
+# docker-compose.yml. This file is gitignored — customize freely.
+#
+# Common customizations shown below — uncomment what you need.
+
+version: "3.9"
+
+services:
+
+  # ── Expose Prometheus UI for local debugging ───────────────────────────────
+  # Useful when you want to directly query Prometheus or check scrape targets.
+  # prometheus:
+  #   ports:
+  #     - "9090:9090"
+
+  # ── Expose Loki for direct log ingestion from host ────────────────────────
+  # loki:
+  #   ports:
+  #     - "3100:3100"
+
+  # ── Expose Tempo OTLP endpoints for local SUT instrumentation ─────────────
+  # Use when your application under test runs on the host (not inside Docker).
+  # tempo:
+  #   ports:
+  #     - "3200:3200"
+  #     - "4317:4317"   # OTLP gRPC
+  #     - "4318:4318"   # OTLP HTTP
+
+  # ── Expose Pyroscope for local profiling UI ───────────────────────────────
+  # pyroscope:
+  #   ports:
+  #     - "4040:4040"
+
+  # ── Change Grafana port to avoid conflicts ────────────────────────────────
+  # grafana:
+  #   ports:
+  #     - "3001:3000"
+
+  # ── Mount local k6 scripts directly (skip npm build step) ─────────────────
+  # Useful for rapid iteration on test scripts without rebuilding.
+  # k6:
+  #   volumes:
+  #     - ../src/clients:/scripts:ro
+  #     - ../reports:/reports
+
+  # ── Increase Prometheus retention for long soak tests ─────────────────────
+  # prometheus:
+  #   command:
+  #     - --config.file=/etc/prometheus/prometheus.yml
+  #     - --storage.tsdb.path=/prometheus
+  #     - --storage.tsdb.retention.time=90d
+  #     - --web.enable-lifecycle
+  #     - --web.enable-remote-write-receiver
+
+  # ── Lower resource limits for lightweight dev machines ─────────────────────
+  # redis:
+  #   command: >
+  #     redis-server
+  #     --appendonly yes
+  #     --maxmemory 128mb
+  #     --maxmemory-policy allkeys-lru

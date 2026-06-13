@@ -1,0 +1,18 @@
+{
+  "name": "capacity",
+  "description": "Capacity testing — finds maximum sustainable throughput before SLA breach",
+  "stages": [
+    { "duration": "3m",  "target": 50  },
+    { "duration": "3m",  "target": 100 },
+    { "duration": "3m",  "target": 150 },
+    { "duration": "3m",  "target": 200 },
+    { "duration": "5m",  "target": 200 },
+    { "duration": "3m",  "target": 0   }
+  ],
+  "thresholds": {
+    "http_req_duration": ["p(95)<2000", "p(99)<5000"],
+    "http_req_failed": ["rate<0.15"],
+    "checks": ["rate>=0.85"]
+  },
+  "maxDuration": "25m"
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "k6-enterprise/rbac-config/v1",
+  "title": "k6 Enterprise Framework — RBAC Configuration Schema",
+  "description": "Schema for RBAC (Role-Based Access Control) user-role assignments stored in clients/{name}/config/rbac.json",
+  "type": "object",
+  "required": ["users"],
+  "additionalProperties": false,
+  "properties": {
+    "users": {
+      "type": "array",
+      "description": "Users and their role assignments",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique user identifier (matches $USER or K6_USER)"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["admin", "lead", "developer"],
+            "description": "Assigned role (admin: full access, lead: client-level, developer: restricted)"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Optional email for notifications"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "client": "examples",
+  "description": "Reference client — demonstrates all framework patterns and helpers",
+  "services": {
+    "httpbin": {
+      "baseUrl": "https://httpbin.test.k6.io",
+      "timeout": 10000,
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      }
+    },
+    "postman-echo": {
+      "baseUrl": "https://postman-echo.com",
+      "timeout": 10000
+    }
+  },
+  "defaultProfile": "smoke",
+  "reporting": {
+    "branding": {
+      "clientName": "Examples",
+      "primaryColor": "#6c63ff"
+    }
+  }
+}

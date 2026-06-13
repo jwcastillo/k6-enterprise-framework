@@ -1,0 +1,9 @@
+{
+  "*.ts": [
+    "node bin/testing/check-esm.js --files",
+    "tsc --noEmit --skipLibCheck"
+  ],
+  "*": [
+    "node bin/testing/detect-secrets.js --files"
+  ]
+}
