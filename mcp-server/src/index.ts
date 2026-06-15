@@ -300,19 +300,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       // ── T-109: AI Agent tools ───────────────────────────────────────────
       case "query_knowledge_base":
-        result = await queryKnowledgeBase(args as Parameters<typeof queryKnowledgeBase>[0]);
+        result = await queryKnowledgeBase(
+          args as unknown as Parameters<typeof queryKnowledgeBase>[0]
+        );
         break;
       case "get_observability_data":
-        result = await getObservabilityData(args as Parameters<typeof getObservabilityData>[0]);
+        result = await getObservabilityData(
+          args as unknown as Parameters<typeof getObservabilityData>[0]
+        );
         break;
       case "validate_generated_code":
-        result = await validateGeneratedCode(args as Parameters<typeof validateGeneratedCode>[0]);
+        result = await validateGeneratedCode(
+          args as unknown as Parameters<typeof validateGeneratedCode>[0]
+        );
         break;
       case "get_test_history":
-        result = getTestHistory(args as Parameters<typeof getTestHistory>[0]);
+        result = getTestHistory(args as unknown as Parameters<typeof getTestHistory>[0]);
         break;
       case "create_jira_ticket":
-        result = await createJiraTicket(args as Parameters<typeof createJiraTicket>[0]);
+        result = await createJiraTicket(args as unknown as Parameters<typeof createJiraTicket>[0]);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
