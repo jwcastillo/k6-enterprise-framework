@@ -7,6 +7,9 @@ export {
   randomCreditCard,
   randomUser,
   randomPrice,
+  pickRandom,
+  pickWeighted,
+  pickWeightedFn,
 } from "./data-helper";
 export { DateHelper } from "./date-helper";
 export { HeaderHelper } from "./header-helper";
