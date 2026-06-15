@@ -7,10 +7,13 @@ settings:
 overrides:
   ws: 8.21.0
   launch-editor: 2.14.1
-  js-yaml: 4.2.0
   '@babel/core': 7.29.7
   serialize-javascript: 7.0.5
   uuid: 11.1.1
+  js-yaml: 4.2.0
+
+patchedDependencies:
+  gray-matter@4.0.3: 0550eac5176580bcb80c7a8504d3397cef2868a0c8a9162cc9608e0654de0f89
 
 importers:
 
@@ -7161,7 +7164,7 @@ snapshots:
       fs-extra: 11.3.5
       github-slugger: 1.5.0
       globby: 11.1.0
-      gray-matter: 4.0.3
+      gray-matter: 4.0.3(patch_hash=0550eac5176580bcb80c7a8504d3397cef2868a0c8a9162cc9608e0654de0f89)
       jiti: 1.21.7
       js-yaml: 4.2.0
       lodash: 4.18.1
@@ -9005,7 +9008,7 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  gray-matter@4.0.3:
+  gray-matter@4.0.3(patch_hash=0550eac5176580bcb80c7a8504d3397cef2868a0c8a9162cc9608e0654de0f89):
     dependencies:
       js-yaml: 4.2.0
       kind-of: 6.0.3
