@@ -201,6 +201,54 @@ export function pickWeightedFn<T extends () => unknown>(weightedFuncs: Array<[nu
 /** @deprecated renamed to pickWeightedFn — collided with patterns/weighted-execution.ts::weightedSwitch which has a different signature and behavior. */
 export const weightedSwitch = pickWeightedFn;
 
+/**
+ * Pick a uniformly-random element from a non-empty array.
+ *
+ * @example
+ *   const route = pickRandom(routes); // each route equally likely
+ */
+export function pickRandom<T>(items: T[]): T {
+  if (!items.length) throw new Error("pickRandom: empty array");
+  return items[(Math.random() * items.length) | 0];
+}
+
+/**
+ * Pick one element from `items` using positive *relative* weights.
+ *
+ * Unlike {@link pickWeightedFn}, weights need NOT sum to 1.0 — they are
+ * normalized internally, so `[60, 30, 10]` means 60% / 30% / 10%. Negative or
+ * non-numeric weights are treated as 0. Returns an item (not a function), which
+ * makes it the right tool for data-driven selection (routes, payloads, users…).
+ *
+ * @param items   Candidate values; must be non-empty.
+ * @param weights Relative weight per item; must match `items.length`.
+ *
+ * @example
+ *   // 60% short, 30% medium, 10% long
+ *   const bucket = pickWeighted(["short", "medium", "long"], [60, 30, 10]);
+ *
+ * @example
+ *   // Weights from an env var: -e DISTANCE_MIX="70,20,10"
+ *   const mix = (__ENV.DISTANCE_MIX || "60,30,10").split(",").map(Number);
+ *   const route = pickWeighted(routes, mix);
+ */
+export function pickWeighted<T>(items: T[], weights: number[]): T {
+  if (!items.length) throw new Error("pickWeighted: empty items array");
+  if (items.length !== weights.length) {
+    throw new Error(
+      `pickWeighted: items (${items.length}) and weights (${weights.length}) length mismatch`
+    );
+  }
+  const safe = weights.map((w) => Math.max(0, Number(w) || 0));
+  const total = safe.reduce((a, b) => a + b, 0) || 1;
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    if (r < safe[i]) return items[i];
+    r -= safe[i];
+  }
+  return items[items.length - 1];
+}
+
 /** Format number with thousand separators */
 export function formatNumber(num: number, separator = ","): string {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, separator);
