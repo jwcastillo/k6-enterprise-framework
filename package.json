@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "k6 Enterprise Load Testing Framework — two-layer architecture with reusable helpers, patterns, and multi-client isolation",
   "private": true,
-  "packageManager": "pnpm@11",
+  "packageManager": "pnpm@11.1.1",
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "build:watch": "webpack --config webpack.config.js --watch",
