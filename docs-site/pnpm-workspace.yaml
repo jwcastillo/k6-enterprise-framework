@@ -8,7 +8,12 @@ packages:
 overrides:
   ws: 8.21.0
   launch-editor: 2.14.1
-  js-yaml: 4.2.0
   "@babel/core": 7.29.7
   serialize-javascript: 7.0.5
   uuid: 11.1.1
+  # gray-matter is patched (patches/) to use js-yaml 4's load/dump API,
+  # so we can force the patched js-yaml across the tree.
+  js-yaml: 4.2.0
+
+patchedDependencies:
+  gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
