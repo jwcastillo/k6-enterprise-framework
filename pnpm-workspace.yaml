@@ -2,3 +2,11 @@
 # captured by a stray pnpm-workspace.yaml in an ancestor directory.
 packages:
   - .
+
+# Security overrides — force patched versions of vulnerable transitive deps.
+# (pnpm 10+ reads overrides from here, not from package.json's "pnpm" field.)
+overrides:
+  js-yaml: 4.2.0
+  lodash: 4.18.1
+  tmp: 0.2.7
+  vite: 8.0.16
