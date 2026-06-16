@@ -361,9 +361,9 @@ export function profileToOptions(
       scenario.stages = profile.stages;
     }
 
-    if (profile.maxDuration) {
-      scenario.maxDuration = profile.maxDuration;
-    }
+    // NOTE: maxDuration is NOT a valid field for arrival-rate executors in k6
+    // (rejected with "unknown field maxDuration", aborting the run). Only set it
+    // at the options root below, where k6 tolerates it (VU-based path relies on that).
 
     return {
       scenarios: { default: scenario },
