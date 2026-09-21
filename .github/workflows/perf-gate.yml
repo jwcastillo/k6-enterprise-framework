@@ -22,7 +22,7 @@ on:
       # Only run when app code or perf tests change
       - "src/**"
       - "clients/**"
-      - "src/**"
+      - "bin/**"
 
   # Allow manual trigger for debugging
   workflow_dispatch:
@@ -35,6 +35,10 @@ on:
         description: "Target environment"
         required: true
         default: "staging"
+      scenario:
+        description: "Scenario to gate on (must be hermetic if the env is unreachable)"
+        required: true
+        default: "domain/orders-lifecycle"
 
 concurrency:
   group: perf-gate-${{ github.event.pull_request.number || github.run_id }}
@@ -82,51 +86,60 @@ jobs:
       - name: Run quality gate (smoke profile)
         id: quality-gate
         env:
-          # T-088: Support TEST_CONFIG env var for inline config
+          # T-088 / T-085: el runner todavia NO lee estas dos (grep en run-test.sh da 0).
+          # Se dejan porque el contrato del pipeline ya las expone; hoy no tienen efecto.
           TEST_CONFIG: ${{ vars.PERF_TEST_CONFIG }}
-          # T-085: Override thresholds per pipeline if needed
           QG_THRESHOLDS_OVERRIDE: ${{ vars.PERF_QG_THRESHOLDS_OVERRIDE }}
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+          # El runner falla cerrado si el cliente no trae rbac.json. En CI no hay
+          # usuario al que autorizar; el bypass queda registrado en el audit log.
+          K6_RBAC_PERMISSIVE: "true"
         run: |
           CLIENT="${{ github.event.inputs.client || '_reference' }}"
           ENV="${{ github.event.inputs.env || 'staging' }}"
-          REPORT_FILE="reports/gate-${CLIENT}-${{ github.run_id }}.json"
+          SCENARIO="${{ github.event.inputs.scenario || 'domain/orders-lifecycle' }}"
+          GATE_DIR="reports/gate-${{ github.run_id }}"
 
           set +e
           bash bin/run-test.sh \
             --client="${CLIENT}" \
             --env="${ENV}" \
+            --scenario="${SCENARIO}" \
             --profile=smoke \
-            --quality-gate \
-            --out="json=${REPORT_FILE}"
+            --reports-dir="${GATE_DIR}"
           EXIT_CODE=$?
           set -e
 
-          # T-085: Map exit codes
+          # El runner nombra los artefactos con un timestamp, asi que se busca el summary
+          # en vez de construir la ruta.
+          SUMMARY="$(find "${GATE_DIR}" -name 'summary-*.json' 2>/dev/null | sort | tail -1)"
+
+          # Codigos del runner: 0 = thresholds cumplidos, 99 = SLOs no cumplidos,
+          # 1 = error o regresion critica, 107 = error de build/script.
           case $EXIT_CODE in
-            0)  GATE_PASSED=true;  echo "gate_passed=true"  >> "$GITHUB_OUTPUT" ;;
-            1)  GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
-            99) GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
-            *)  GATE_PASSED=false; echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
+            0)  echo "gate_passed=true"  >> "$GITHUB_OUTPUT" ;;
+            *)  echo "gate_passed=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
           echo "exit_code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
-          echo "report_file=${REPORT_FILE}" >> "$GITHUB_OUTPUT"
+          echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+          echo "gate_dir=${GATE_DIR}" >> "$GITHUB_OUTPUT"
 
       - name: Generate quality gate report
-        if: always()
+        if: always() && steps.quality-gate.outputs.summary != ''
         run: |
           node bin/generate-report.js \
-            --input "reports/gate-${{ github.event.inputs.client || '_reference' }}-${{ github.run_id }}.json" \
-            --output "reports/gate-${{ github.event.inputs.client || '_reference' }}-${{ github.run_id }}.html" \
-            --type quality-gate || true
+            --input="${{ steps.quality-gate.outputs.summary }}" \
+            --output="reports/gate-${{ github.run_id }}.html" || true
 
       - name: Upload gate report as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: perf-gate-report-${{ github.run_id }}
-          path: reports/gate-*-${{ github.run_id }}.*
+          path: |
+            reports/gate-${{ github.run_id }}/**
+            reports/gate-${{ github.run_id }}.html
           retention-days: 14
 
       - name: Post PR comment with results
