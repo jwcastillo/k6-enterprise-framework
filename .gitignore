@@ -54,6 +54,15 @@ data/
 k6-results*.json
 summary*.json
 
+# Build-regenerated k6 embed entrypoint (regenerated each ./bin/build-binary.sh run; NOT source)
+cmd/k6-embedded/entrypoint/go.mod
+cmd/k6-embedded/entrypoint/go.sum
+cmd/k6-embedded/entrypoint/main.go
+# Binario compilado del entrypoint (66 MB, lo produce ./bin/build-binary.sh)
+cmd/k6-embedded/entrypoint/k6-entrypoint
+# Build-staged client config copied into the embed tree (leaked untracked artifact)
+cmd/k6-embedded/scripts/config/
+
 # Logs
 *.log
 
@@ -63,8 +72,3 @@ tmp/
 docs-site/node_modules/
 docs-site/build/
 docs-site/.docusaurus/
-
-# Local agent / planning artifacts (internal, not part of the framework)
-.planning/
-.claude/settings.local.json
-.agents/
