@@ -115,7 +115,7 @@ jobs:
         run: pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
       - name: "Build TypeScript bundle"
-        run: pnpm run build
+        run: pnpm --config.verifyDepsBeforeRun=false run build
 
       # ── 5. Run baseline gate ─────────────────────────────────────────────────
       # Invokes run-test.sh Step 4b which calls bin/compare.sh and maps
