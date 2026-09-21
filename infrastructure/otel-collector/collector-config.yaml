@@ -55,4 +55,11 @@ service:
       processors: [memory_limiter, batch]
   telemetry:
     logs: { level: info }
-    metrics: { address: 0.0.0.0:8888 }
+    metrics:
+      # collector >=0.16x removio 'address'; la metrica propia se expone via reader OTel.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
