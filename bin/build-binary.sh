@@ -18,7 +18,7 @@ CLIENT=""
 PLATFORM=""
 VERIFY="false"
 OUTPUT_DIR=""
-K6_VERSION="v1.6.1"
+K6_VERSION="v2.0.0"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -50,7 +50,7 @@ OPTIONS:
 
 PREREQUISITES:
   - Go >= 1.21  (detected via PATH or asdf)
-  - Node.js + npm
+  - Node.js + pnpm
 
 EXAMPLES:
   ./bin/build-binary.sh --client examples
@@ -172,7 +172,7 @@ fi
 BINARY_NAME="k6-${CLIENT}"
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
-for cmd in node npm; do
+for cmd in node pnpm; do
   if ! command -v "${cmd}" &>/dev/null; then
     log_error "Required command '${cmd}' not found in PATH"
     exit 1
@@ -193,7 +193,7 @@ echo ""
 
 # ── Step 1: TypeScript build ──────────────────────────────────────────────────
 log_info "Step 1/5: Building TypeScript bundle..."
-if ! npm run build --prefix "${ROOT_DIR}" 2>&1; then
+if ! pnpm --dir "${ROOT_DIR}" run build 2>&1; then
   log_error "TypeScript build failed."
   exit 1
 fi
@@ -262,7 +262,7 @@ module k6-entrypoint
 go ${GO_MINOR_VERSION:-1.23}
 
 require (
-    go.k6.io/k6 ${K6_VERSION}
+    go.k6.io/k6/v2 ${K6_VERSION}
     k6-embedded v0.0.0
 )
 
