@@ -60,15 +60,16 @@ jobs:
         with:
           k6-version: "2.2.0"
 
+      - uses: pnpm/action-setup@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci --prefer-offline
+        run: pnpm install --frozen-lockfile
 
       - name: Build TypeScript
         run: npm run build
