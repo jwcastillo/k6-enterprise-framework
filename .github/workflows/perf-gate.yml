@@ -58,12 +58,12 @@ jobs:
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
         with:
-          k6-version: "0.54.0"
+          k6-version: "2.2.0"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: k6-framework/package-lock.json
 
