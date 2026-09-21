@@ -123,7 +123,7 @@ services:
   # ── Tempo ──────────────────────────────────────────────────────────────────
   # Part of 'observability' profile — distributed tracing via OTLP.
   tempo:
-    image: grafana/tempo:${TEMPO_VERSION:-2.10.8}
+    image: grafana/tempo:${TEMPO_VERSION:-3.0.3}
     container_name: k6-tempo
     profiles:
       - observability

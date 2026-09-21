@@ -1,3 +1,11 @@
+# Tempo 3.0. Migrado del formato 2.x con `tempo-cli migrate config` y completado a
+# mano: el CLI descarta los valores de `ingester`/`compactor` (secciones eliminadas
+# en 3.0) y deja la compactacion apagada, pensado para convivir con un 2.x durante
+# el rollout. Acá no hay 2.x, así que se reactiva y se reexpresan los valores.
+#
+# Mapeo 2.x -> 3.0:
+#   ingester.*  -> live_store.*   (trazas recientes en memoria)
+#   compactor.* -> backend_scheduler.provider.compaction.compaction.*
 server:
   http_listen_port: 3200
 
@@ -10,17 +18,27 @@ distributor:
         grpc:
           endpoint: "0.0.0.0:4317"
 
-ingester:
-  trace_idle_period: 10s
-  max_block_bytes: 1_000_000
-  max_block_duration: 5m
+# Era `ingester` en 2.x. Bloques chicos y corte rapido: es un stack de carga local,
+# interesa ver la traza en Grafana en segundos, no optimizar el almacenamiento.
+live_store:
+  max_trace_idle: 10s       # 2.x: ingester.trace_idle_period (default 3.0: 5s)
+  max_block_duration: 5m    # 2.x: ingester.max_block_duration (default 3.0: 30s)
+  max_block_bytes: 1000000  # 2.x: ingester.max_block_bytes    (default 3.0: 50MiB)
 
-compactor:
-  compaction:
-    compaction_window: 1h
-    max_block_bytes: 100_000_000
-    # T-147: Default retention is 720h (30 days).
-    block_retention: 720h
+# Camino a object storage. En modo monolitico corre in-process, sin Kafka.
+block_builder:
+  block:
+    max_block_bytes: 1000000
+
+# Era `compactor` en 2.x. El anidado provider.compaction.compaction es el real.
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        compaction_window: 1h
+        max_block_bytes: 100000000  # default 3.0: 100GiB, acá 100MB a proposito
+        # T-147: retencion de 720h (30 dias). El default de 3.0 son 336h (14 dias).
+        block_retention: 720h
 
 storage:
   trace:
