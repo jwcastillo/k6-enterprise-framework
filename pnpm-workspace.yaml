@@ -22,6 +22,9 @@ overrides:
 
 # pnpm 10+ no ejecuta scripts de instalacion salvo que se declaren, y aborta con
 # ERR_PNPM_IGNORED_BUILDS si alguno queda pendiente. @datadog/pprof es nativo y
-# llega por @pyroscope/nodejs: sin su build, el profiling continuo no funciona.
-onlyBuiltDependencies:
+# llega por @pyroscope/nodejs, que es optionalDependency: en macOS trae binario
+# prebuilt y no compila nada, en Linux si. Se declara ignorado a proposito — el
+# framework y sus tests no lo necesitan; quien use profiling continuo corre
+# `pnpm approve-builds` para habilitarlo en su maquina.
+ignoredBuiltDependencies:
   - "@datadog/pprof"
