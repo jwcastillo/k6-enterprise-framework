@@ -24,17 +24,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"go.k6.io/k6/js/modules"
+	"go.k6.io/k6/v2/js/modules"
 )
 
 // scripts holds all compiled JS bundles copied here by build-binary.sh.
+// Uses "all:" prefix so Go embed includes the .keep sentinel when scripts/ is
+// otherwise empty (i.e. before build-binary.sh stages the bundles).
 //
-//go:embed scripts
+//go:embed all:scripts
 var scripts embed.FS
 
 // dataFiles holds test data files (CSV, JSON, TXT, b64) needed by open() at runtime.
+// Uses "all:" prefix so Go embed includes the .keep sentinel file when data/ is otherwise empty.
 //
-//go:embed data
+//go:embed all:data
 var dataFiles embed.FS
 
 func init() {
