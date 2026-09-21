@@ -103,16 +103,13 @@ jobs:
           name: dist
           path: dist/
 
+      # El metodo apt/gpg no funciona en los runners: gpg no tiene dirmngr y falla
+      # con "keyserver receive failed". Se usa la misma action que el resto de los
+      # workflows, con la version pineada en un solo lugar.
       - name: Install k6
-        run: |
-          sudo gpg --no-default-keyring \
-            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 \
-            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D68
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
-            https://dl.k6.io/deb stable main" \
-            | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update -qq && sudo apt-get install -y -qq k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "2.2.0"
 
       - name: Validate workflow inputs
         # T-140: Sanitize inputs from workflow_dispatch before use in shell
