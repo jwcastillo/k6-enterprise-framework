@@ -1501,11 +1501,12 @@ if [[ -f "${K6_LOG}" ]]; then
         if (obj && obj.event === "unexpected_status") errors.push(obj);
       } catch (_) { /* malformed payload */ }
     }
+    // exit 2 = no hubo unexpected_status (el caso normal). El caller lo distingue
+    // de exit 0 (se escribio el JSON); no debe tumbar el script bajo set -e.
     if (errors.length === 0) process.exit(2);
     const payload = { generatedAt: new Date().toISOString(), count: errors.length, errors };
     fs.writeFileSync(process.argv[2], JSON.stringify(payload, null, 2));
-  ' "${K6_LOG}" "${UNEXPECTED_ERRORS_JSON}" 2>/dev/null
-  _unexp_exit=$?
+  ' "${K6_LOG}" "${UNEXPECTED_ERRORS_JSON}" 2>/dev/null && _unexp_exit=0 || _unexp_exit=$?
   if [[ "${_unexp_exit}" -eq 0 ]] && [[ -f "${UNEXPECTED_ERRORS_JSON}" ]]; then
     _unexp_count=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).count)' "${UNEXPECTED_ERRORS_JSON}" 2>/dev/null || echo "?")
     log_warn "Unexpected status responses: ${UNEXPECTED_ERRORS_JSON} (${_unexp_count} captured)"
