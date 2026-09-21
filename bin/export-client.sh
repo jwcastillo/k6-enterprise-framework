@@ -574,6 +574,21 @@ FRAMEWORK_FILE_COUNT=$((FRAMEWORK_FILE_COUNT + 1))
 
 log_success "Framework core copied (${FRAMEWORK_FILE_COUNT} files)"
 
+# ── Framework documentation → standalone (docs/framework/) ───────────────────
+# La doc del framework vive en docs-site/docs (Docusaurus) + README raíz. El export
+# solo generaba un README de cliente, dejando el standalone sin la doc del framework.
+# La traemos a docs/framework/ (junto a la doc del cliente en docs/, sin pisarla).
+FW_DOCS_DIR="${OUTPUT_DIR}/docs/framework"
+mkdir -p "${FW_DOCS_DIR}"
+cp "${ROOT_DIR}/README.md" "${FW_DOCS_DIR}/FRAMEWORK.md"
+[[ -f "${ROOT_DIR}/docs-site/docs/intro.md" ]] && cp "${ROOT_DIR}/docs-site/docs/intro.md" "${FW_DOCS_DIR}/intro.md"
+if [[ -d "${ROOT_DIR}/docs-site/docs/framework" ]]; then
+  cp -R "${ROOT_DIR}/docs-site/docs/framework/." "${FW_DOCS_DIR}/"
+fi
+FW_DOCS_COUNT=$(find "${FW_DOCS_DIR}" -type f | wc -l | tr -d ' ')
+FRAMEWORK_FILE_COUNT=$((FRAMEWORK_FILE_COUNT + FW_DOCS_COUNT))
+log_success "Framework docs copied (${FW_DOCS_COUNT} files → docs/framework/)"
+
 TOTAL_COPIED=$((CLIENT_FILE_COUNT + FRAMEWORK_FILE_COUNT))
 log_info "Total files copied: ${BOLD}${TOTAL_COPIED}${RESET}"
 

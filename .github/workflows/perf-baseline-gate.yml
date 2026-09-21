@@ -1,0 +1,209 @@
+# perf-baseline-gate.yml — Baseline regression gate using k6-compare
+#
+# Exercises the --gate-baseline flow already wired in run-test.sh Step 4b:
+#   run-test.sh --gate-baseline=<file> → bin/compare.sh <baseline.json> <current.json>
+#   bin/compare.sh exit codes: 0 = ok, 3 = regression, 5 = load-model mismatch, 1 = error
+#   run-test.sh maps any non-zero from bin/compare.sh to FINAL_EXIT=99
+#
+# This workflow differs from the other perf workflows:
+#   perf-gate.yml       — PR threshold gate via --quality-gate (NOT baseline diff)
+#   perf-regression.yml — Nightly regression suite via bin/run-regression.sh (NOT --gate-baseline)
+#
+# When to use this workflow:
+#   1. You have committed a k6 JSON summary baseline to the repo (e.g. reports/baseline.json)
+#   2. You want to gate a deployment or PR on no-regression vs that committed baseline
+#   3. You want a one-off manual verification via workflow_dispatch
+#
+# IMPORTANT: If the baseline file does not exist at the path provided, run-test.sh Step 4b
+# logs a warning and skips the gate (does not fail). Commit a baseline first.
+#
+# bin/compare.sh tiers:
+#   Tier A: k6-compare binary on PATH → exit 0 (ok) / 3 (regression) / 5 (load-model mismatch) / 1 (error)
+#   Tier B: go on PATH → go install github.com/jwcastillo/k6-compare@latest, then exec
+#   Tier C: node bin/compare-results.js → exit 0 (ok) / 1 (degraded)
+#
+# Secrets required (optional):
+#   PERF_SLACK_WEBHOOK  — Slack webhook for regression alerts
+
+name: "Performance Baseline Gate"
+
+on:
+  # Manual trigger with configurable inputs
+  workflow_dispatch:
+    inputs:
+      client:
+        description: "Client name (must have a config/default.json)"
+        required: true
+        default: "_reference"
+      env:
+        description: "Target environment"
+        required: true
+        default: "staging"
+      baseline:
+        description: "Path to committed baseline JSON (relative to k6-framework/)"
+        required: true
+        default: "reports/baseline.json"
+
+  # Callable from other workflows (e.g. deploy pipelines that want a regression guard)
+  workflow_call:
+    inputs:
+      client:
+        required: false
+        type: string
+        default: "_reference"
+      env:
+        required: false
+        type: string
+        default: "staging"
+      baseline:
+        required: false
+        type: string
+        default: "reports/baseline.json"
+    secrets:
+      PERF_SLACK_WEBHOOK:
+        required: false
+
+# Allow one concurrent run per client; do not cancel in-progress runs (data loss risk)
+concurrency:
+  group: perf-baseline-gate-${{ github.event.inputs.client || inputs.client || '_reference' }}
+  cancel-in-progress: false
+
+jobs:
+  baseline-gate:
+    name: "Baseline Gate — ${{ github.event.inputs.client || inputs.client || '_reference' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    outputs:
+      exit_code: ${{ steps.gate.outputs.exit_code }}
+      gate_status: ${{ steps.gate.outputs.gate_status }}
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      # fetch-depth: 0 so that a committed baseline from a prior commit is accessible
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. k6 runtime ───────────────────────────────────────────────────────
+      - name: "Setup k6"
+        uses: grafana/setup-k6-action@v1
+
+      # ── 3. Go toolchain ─────────────────────────────────────────────────────
+      # Required for bin/compare.sh Tier B: go install github.com/jwcastillo/k6-compare@latest
+      - name: "Setup Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      # ── 4. Node.js + pnpm ───────────────────────────────────────────────────
+      # pnpm is the only supported package manager for this repo (CLAUDE.md constraint)
+      - name: "Setup pnpm"
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: k6-framework/pnpm-lock.yaml
+
+      - name: "Install dependencies"
+        working-directory: k6-framework
+        run: pnpm install --frozen-lockfile
+
+      - name: "Build TypeScript bundle"
+        working-directory: k6-framework
+        run: pnpm run build
+
+      # ── 5. Run baseline gate ─────────────────────────────────────────────────
+      # Invokes run-test.sh Step 4b which calls bin/compare.sh and maps
+      # any compare regression to FINAL_EXIT=99.
+      #
+      # NOTE: If the baseline file path does not exist on disk, run-test.sh logs
+      # a warning ("Baseline file not found — skipping gate") and continues without
+      # failing. To activate the gate, commit a baseline JSON to the repo first.
+      - name: "Run baseline regression gate"
+        id: gate
+        working-directory: k6-framework
+        env:
+          NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+        run: |
+          CLIENT="${{ github.event.inputs.client || inputs.client || '_reference' }}"
+          ENV="${{ github.event.inputs.env || inputs.env || 'staging' }}"
+          BASELINE="${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}"
+          CURRENT_REPORT="reports/baseline-current-${{ github.run_id }}.json"
+
+          # Warn early if the baseline file is missing so the user knows why the gate was skipped
+          if [[ ! -f "${BASELINE}" ]]; then
+            echo "::warning::Baseline file '${BASELINE}' not found — gate will be skipped by run-test.sh."
+            echo "Commit a k6 JSON summary to '${BASELINE}' to activate the regression gate."
+          fi
+
+          set +e
+          bash bin/run-test.sh \
+            --client="${CLIENT}" \
+            --env="${ENV}" \
+            --profile=smoke \
+            --gate-baseline="${BASELINE}" \
+            --out="json=${CURRENT_REPORT}"
+          EXIT_CODE=$?
+          set -e
+
+          # Map exit code to a readable status
+          case $EXIT_CODE in
+            0)   GATE_STATUS="pass"      ;;
+            99)  GATE_STATUS="regression" ;;
+            107) GATE_STATUS="build-error" ;;
+            *)   GATE_STATUS="error"     ;;
+          esac
+
+          echo "exit_code=${EXIT_CODE}"   >> "$GITHUB_OUTPUT"
+          echo "gate_status=${GATE_STATUS}" >> "$GITHUB_OUTPUT"
+          echo "current_report=${CURRENT_REPORT}" >> "$GITHUB_OUTPUT"
+
+          echo "Baseline gate finished — exit=${EXIT_CODE} status=${GATE_STATUS}"
+
+      # ── 6. Upload artifacts ─────────────────────────────────────────────────
+      - name: "Upload run artifacts"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "baseline-gate-${{ github.event.inputs.client || inputs.client || '_reference' }}-${{ github.run_id }}"
+          path: |
+            k6-framework/reports/baseline-current-${{ github.run_id }}.json
+            k6-framework/reports/baseline-current-${{ github.run_id }}.html
+          retention-days: 14
+          if-no-files-found: warn
+
+      # ── 7. Fail on regression ─────────────────────────────────────────────
+      # exit_code 99 = bin/compare.sh detected a regression (Tier A exit 3 or 5 mapped)
+      # Any other non-zero = unexpected error in run-test.sh
+      - name: "Fail on regression or error"
+        if: always()
+        run: |
+          EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
+          GATE_STATUS="${{ steps.gate.outputs.gate_status }}"
+          BASELINE="${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}"
+
+          case "${EXIT_CODE}" in
+            0)
+              echo "Baseline gate: PASS — no regression detected vs ${BASELINE}"
+              ;;
+            99)
+              echo "::error::Baseline gate REGRESSION (exit 99) — current run regressed vs ${BASELINE}"
+              echo "Review the uploaded artifact for detailed comparison output from bin/compare.sh."
+              exit 1
+              ;;
+            "")
+              # Step was skipped (e.g. prior step failed before writing output)
+              echo "::warning::gate step did not produce an exit code — treating as inconclusive"
+              ;;
+            *)
+              echo "::error::Baseline gate ERROR (exit ${EXIT_CODE}, status=${GATE_STATUS}) — check run-test.sh logs"
+              exit 1
+              ;;
+          esac
