@@ -19,3 +19,9 @@ overrides:
   fast-uri: ^3.1.6
   brace-expansion@1: ^1.1.18
   brace-expansion@>=3: ^5.0.9
+
+# pnpm 10+ no ejecuta scripts de instalacion salvo que se declaren, y aborta con
+# ERR_PNPM_IGNORED_BUILDS si alguno queda pendiente. @datadog/pprof es nativo y
+# llega por @pyroscope/nodejs: sin su build, el profiling continuo no funciona.
+onlyBuiltDependencies:
+  - "@datadog/pprof"
