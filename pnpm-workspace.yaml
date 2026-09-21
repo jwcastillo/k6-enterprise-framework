@@ -6,7 +6,16 @@ packages:
 # Security overrides — force patched versions of vulnerable transitive deps.
 # (pnpm 10+ reads overrides from here, not from package.json's "pnpm" field.)
 overrides:
-  js-yaml: 4.2.0
+  # js-yaml se queda en la linea 4.x: gray-matter (docs-site) no soporta 5.x.
+  # 4.2.0 quedo vulnerable, 4.3.2 corrige sin salir de 4.x.
+  js-yaml: 4.3.2
   lodash: 4.18.1
   tmp: 0.2.7
   vite: 8.0.16
+  # Transitivas con CVE. brace-expansion vive en dos lineas a la vez en el arbol,
+  # asi que se acota por rango en vez de forzar una sola version para todos.
+  baseline-browser-mapping: ^2.11.0
+  browserslist: ^4.28.7
+  fast-uri: ^3.1.6
+  brace-expansion@1: ^1.1.18
+  brace-expansion@>=3: ^5.0.9
