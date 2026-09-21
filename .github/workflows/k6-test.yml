@@ -138,6 +138,9 @@ jobs:
             --env "${K6_ENV}"
         env:
           K6_SECRETS_BACKENDS: env
+          # El runner falla cerrado si el cliente no trae rbac.json y en CI no hay
+          # usuario al que autorizar. El bypass queda en el audit log.
+          K6_RBAC_PERMISSIVE: "true"
           # Application secrets: set in GitHub repository Settings > Secrets
           # Uncomment and configure as needed:
           # APP_API_KEY: ${{ secrets.APP_API_KEY }}
