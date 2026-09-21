@@ -32,8 +32,13 @@ const SECRET_PATTERNS = [
   { re: /AKIA[0-9A-Z]{16}/,                           label: "AWS Access Key ID" },
   { re: /-----BEGIN\s+(RSA\s+)?PRIVATE KEY-----/,     label: "PEM private key" },
   { re: /['\"]?(?:api[_-]?key|apikey|api_secret)['\"]?\s*[:=]\s*['\"][A-Za-z0-9_\-\.]{16,}['\"]/, label: "API key assignment" },
-  { re: /['\"]?(?:password|passwd|secret)['\"]?\s*[:=]\s*['\"][^'"${}\s]{8,}['\"]/i, label: "Hard-coded password" },
-  { re: /(?:postgres|mysql|mongodb|redis):\/\/[^:]+:[^@]+@/i, label: "Connection string with credentials" },
+  // El valor excluye ${...} (interpolacion) y __ENV.X (referencia a variable de
+  // entorno de k6): las dos son placeholders por construccion, no credenciales.
+  { re: /['\"]?(?:password|passwd|secret)['\"]?\s*[:=]\s*['\"](?!__ENV\.)[^'"${}\s]{8,}['\"]/i, label: "Hard-coded password" },
+  // No cuenta como credencial si el userinfo es el literal del placeholder
+  // (password/pass/user/username), esta enmascarado (***) o va entre corchetes o
+  // angulos, que es como se documenta el formato de una URL.
+  { re: /(?:postgres|mysql|mongodb|redis):\/\/(?![\[<])[^:\s\[<]*:(?!(?:password|passwd|pass|user|username|\*+)@|<)[^@\s]+@/i, label: "Connection string with credentials" },
   { re: /ghp_[A-Za-z0-9]{36}/,                        label: "GitHub Personal Access Token" },
   { re: /sk-[A-Za-z0-9]{20,}/,                        label: "API secret key (sk- prefix)" },
 ];

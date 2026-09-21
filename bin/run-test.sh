@@ -977,8 +977,7 @@ else
       exit 107
     fi
   else
-    _build_output=$(npm run build --prefix "${ROOT_DIR}" 2>&1)
-    _build_exit=$?
+    _build_output=$(npm run build --prefix "${ROOT_DIR}" 2>&1) && _build_exit=0 || _build_exit=$?
     if [[ ${_build_exit} -ne 0 ]]; then
       log_error "Build failed. Fix TypeScript errors and retry."
       log_error "Run with K6_VERBOSE=true for full output, or:"
@@ -1416,8 +1415,7 @@ if [[ -f "${SUMMARY_JSON}" ]]; then
   [[ -n "${STORY_ID}" ]] && _ARTIFACT_ARGS+=(--story="${STORY_ID}")
   [[ -n "${STORY_URL}" ]] && _ARTIFACT_ARGS+=(--story-url="${STORY_URL}")
 
-  _artifact_out=$(_run_timed "generate-artifacts" 120 "${_ARTIFACT_ARGS[@]}" 2>&1)
-  _artifact_exit=$?
+  _artifact_out=$(_run_timed "generate-artifacts" 120 "${_ARTIFACT_ARGS[@]}" 2>&1) && _artifact_exit=0 || _artifact_exit=$?
   while IFS= read -r line; do
     case "${line}" in
       "[OK]"*)    log_success "${line#\[OK\] }" ;;
@@ -1454,8 +1452,7 @@ if [[ -f "${HTML_REPORT}" ]]; then
       violations.forEach(v => console.error('[XSS-GUARD] ' + v));
       process.exit(2);
     }
-  " 2>&1)
-  _xss_exit=$?
+  " 2>&1) && _xss_exit=0 || _xss_exit=$?
   if [[ ${_xss_exit} -eq 2 ]]; then
     log_warn "HTML report failed XSS audit — quarantining report"
     printf '%s\n' "${_xss_audit_out}" >&2
@@ -1528,8 +1525,7 @@ if [[ "${EDITORIAL_REPORT}" == "1" ]] && [[ -f "${SUMMARY_JSON}" ]]; then
     # Pass branding org if BRANDING_ORG env var is set
     [[ -n "${BRANDING_ORG:-}" ]] && _editorial_args+=(--branding-org "${BRANDING_ORG}")
 
-    _editorial_out=$(_run_timed "k6-report-editorial" 30 "${_editorial_args[@]}" 2>&1)
-    _editorial_exit=$?
+    _editorial_out=$(_run_timed "k6-report-editorial" 30 "${_editorial_args[@]}" 2>&1) && _editorial_exit=0 || _editorial_exit=$?
     if [[ "${_editorial_exit}" -eq 0 ]] && [[ -f "${EDITORIAL_HTML}" ]]; then
       log_success "Editorial report: ${EDITORIAL_HTML}"
     else

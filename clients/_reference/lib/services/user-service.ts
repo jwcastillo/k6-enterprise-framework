@@ -43,7 +43,9 @@ export class UserService {
       type: "bearer",
       loginUrl: "/post",
       username,
-      password: "use-secrets-manager-in-real-clients",
+      // Un cliente real toma la credencial del entorno o de un secrets manager,
+      // nunca del codigo. httpbin acepta cualquier valor, asi que aca alcanza.
+      password: __ENV.REFERENCE_PASSWORD || "",
       tokenPath: "json",  // httpbin returns posted body under "json" key
       baseUrl,
     });
