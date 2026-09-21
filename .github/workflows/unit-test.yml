@@ -46,7 +46,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.strictDepBuilds=false
       # LINT-04 zero-tolerance gate: src/ + tracked clients/ (per-client gitignored trees
       # are absent in CI and carry separate CI in their standalone repos).
       # --max-warnings 0 fails on any warning; --error-on-unmatched-pattern fails loud

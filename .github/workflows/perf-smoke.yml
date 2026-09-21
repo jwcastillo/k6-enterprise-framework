@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
       - name: Build TypeScript
         run: npm run build
