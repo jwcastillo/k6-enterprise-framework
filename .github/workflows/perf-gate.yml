@@ -45,6 +45,11 @@ jobs:
     name: Quality Gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # El paso "Post PR comment with results" escribe en el PR; sin esto Octokit
+    # falla con 403 y tumba el job entero.
+    permissions:
+      contents: read
+      pull-requests: write
 
     # Output quality gate result for downstream jobs
     outputs:

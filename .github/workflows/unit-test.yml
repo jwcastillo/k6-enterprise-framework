@@ -52,15 +52,15 @@ jobs:
       # --max-warnings 0 fails on any warning; --error-on-unmatched-pattern fails loud
       # if a gitignore drift makes the glob match nothing (instead of false-greening).
       - name: Lint (zero-tolerance)
-        run: pnpm exec eslint 'src/**/*.ts' 'clients/**/*.ts' --max-warnings 0 --error-on-unmatched-pattern
+        run: pnpm --config.verifyDepsBeforeRun=false exec eslint 'src/**/*.ts' 'clients/**/*.ts' --max-warnings 0 --error-on-unmatched-pattern
       # LINT-04 typecheck gate: tsc --noEmit on tracked surface (tsconfig globs naturally
       # exclude archive/** and gitignored client trees).
       - name: Typecheck
-        run: pnpm exec tsc --noEmit
+        run: pnpm --config.verifyDepsBeforeRun=false exec tsc --noEmit
       # Coverage step also runs unit tests and enforces thresholds (60/55/60/60).
       # vitest exits non-zero when thresholds are violated — this is the COV-08 gate.
       - name: Run tests with coverage enforcement
-        run: pnpm run test:coverage
+        run: pnpm --config.verifyDepsBeforeRun=false run test:coverage
       - uses: actions/upload-artifact@v4
         if: matrix.node == '22' && always()
         with:
