@@ -8,7 +8,7 @@
 //
 // Connection:   REDIS_URL env var (default) or explicit URL in constructor
 //               Format: redis://[:password@]host[:port][/db]
-//               With auth: redis://:mypassword@localhost:6379
+//               With auth: redis://:<password>@localhost:6379
 //
 // IMPORTANT: All methods are async — use in k6 setup/default/teardown with await.
 // REDIS_URL credentials are masked in all log output (CHK-SEC-106).
