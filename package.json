@@ -45,39 +45,39 @@
   },
   "homepage": "https://github.com/jwcastillo/k6-enterprise-framework#readme",
   "devDependencies": {
-    "@commitlint/cli": "^21.0.2",
-    "@commitlint/config-conventional": "^21.0.2",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@types/js-yaml": "^4.0.9",
-    "@types/k6": "^2.0.0",
-    "@types/node": "^25.9.3",
-    "@typescript-eslint/eslint-plugin": "^8.61.0",
-    "@typescript-eslint/parser": "^8.61.0",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@types/k6": "^2.2.1",
+    "@types/node": "^26.6.2",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "@vitest/coverage-v8": "^5.0.1",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "commitizen": "^4.3.2",
     "copy-webpack-plugin": "^14.0.0",
     "cz-conventional-changelog": "^3.3.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.11.0",
     "glob": "^13.0.6",
     "husky": "^9.1.7",
-    "inquirer": "^14.0.2",
+    "inquirer": "^14.2.2",
     "js-yaml": "^4.2.0",
-    "lint-staged": "^17.0.7",
-    "prettier": "^3.8.4",
-    "ts-loader": "^9.6.0",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.8",
+    "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.0",
-    "vitest": "^4.1.8",
-    "webpack": "^5.107.2",
-    "webpack-cli": "^7.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1",
+    "webpack": "^5.111.1",
+    "webpack-cli": "^7.2.3"
   },
   "dependencies": {
-    "ioredis": "^5.11.1"
+    "ioredis": "^6.0.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@pyroscope/nodejs": "^0.4.11",
-    "playwright": "^1.58.2"
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@pyroscope/nodejs": "^0.6.3",
+    "playwright": "^1.63.0"
   }
 }

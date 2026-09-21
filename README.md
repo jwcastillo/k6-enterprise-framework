@@ -2,7 +2,7 @@
 
 > A production-grade, TypeScript-first load testing framework built on [Grafana k6](https://k6.io) — with a two-layer architecture, reusable helpers and patterns, first-class observability, and strict multi-client isolation.
 
-[![k6](https://img.shields.io/badge/k6-v1.6.1-7d64ff)](https://k6.io)
+[![k6](https://img.shields.io/badge/k6-v2.2.0-7d64ff)](https://k6.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11-f69220)](https://pnpm.io)

@@ -1,8 +1,14 @@
 /** T-018b: WebSocketV2Helper — WebSocket usando modulo estable k6/websockets (v1.6.0+) */
 
-import { WebSocket, Params, ReadyState, CompressionAlgorithm } from "k6/websockets";
-import type { MessageEvent, ErrorEvent } from "k6/websockets";
+import { WebSocket, Params } from "k6/websockets";
+import type { MessageEvent, ErrorEvent, ReadyState, CompressionAlgorithm } from "k6/websockets";
 import { check, sleep } from "k6";
+
+// @types/k6 >=2.1 declara estos como tipos literales, no como enums:
+// CompressionAlgorithm = "deflate" y ReadyState = 0 | 1 | 2 | 3 (spec WebSocket).
+const DEFLATE: CompressionAlgorithm = "deflate";
+const WS_CONNECTING: ReadyState = 0;
+const WS_OPEN: ReadyState = 1;
 
 export interface WebSocketV2Config {
   url: string;
@@ -75,7 +81,7 @@ export function runWebSocketV2(
   const params: Params = {};
   if (config.headers) params.headers = config.headers;
   if (config.tags) params.tags = config.tags;
-  if (config.compression) params.compression = CompressionAlgorithm.Deflate;
+  if (config.compression) params.compression = DEFLATE;
 
   const ws = new WebSocket(config.url, null, params);
 
@@ -106,7 +112,7 @@ export function runWebSocketV2(
   if (config.timeoutMs) {
     const timeoutSec = config.timeoutMs / 1000;
     sleep(timeoutSec);
-    if (ws.readyState === ReadyState.Open || ws.readyState === ReadyState.Connecting) {
+    if (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING) {
       ws.close(1000, "timeout");
     }
   }

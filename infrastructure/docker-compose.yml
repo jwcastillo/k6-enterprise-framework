@@ -39,7 +39,7 @@ volumes:
 services:
   # ── Grafana ────────────────────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.2.2}
     container_name: k6-grafana
     ports:
       - "${GRAFANA_HOST_PORT:-3000}:3000"
@@ -73,7 +73,7 @@ services:
 
   # ── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.14.0}
     container_name: k6-prometheus
     # T-135 / T-146 (CHK-SEC-098): Not exposed to host — internal only.
     # Use docker-compose.override.yml.example to expose port 9090 for local debugging.
@@ -105,7 +105,7 @@ services:
   # T-147: Part of 'observability' profile.
   # Start with: docker compose --profile observability up -d
   loki:
-    image: grafana/loki:${LOKI_VERSION:-3.6.7}
+    image: grafana/loki:${LOKI_VERSION:-3.7.8}
     container_name: k6-loki
     profiles:
       - observability
@@ -127,7 +127,7 @@ services:
   # ── Tempo ──────────────────────────────────────────────────────────────────
   # T-147: Part of 'observability' profile — distributed tracing via OTLP.
   tempo:
-    image: grafana/tempo:${TEMPO_VERSION:-2.10.1}
+    image: grafana/tempo:${TEMPO_VERSION:-3.0.3}
     container_name: k6-tempo
     profiles:
       - observability
@@ -151,7 +151,7 @@ services:
   # T-147: Part of 'observability' profile — continuous profiling.
   # Internal only: k6 runner accesses via http://pyroscope:4040 inside k6-net.
   pyroscope:
-    image: grafana/pyroscope:${PYROSCOPE_VERSION:-1.18.1}
+    image: grafana/pyroscope:${PYROSCOPE_VERSION:-2.3.1}
     container_name: k6-pyroscope
     profiles:
       - observability
@@ -173,7 +173,7 @@ services:
   # Internal only on k6-net (4317/4318/13133/1777/8888); expose to host via
   # docker-compose.override.yml mirroring the Tempo example.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION:-0.152.0}
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION:-0.161.0}
     container_name: k6-otel-collector
     profiles:
       - observability
@@ -298,7 +298,7 @@ services:
   # Only starts when: docker compose --profile run up k6
   # T-146: Only port 6565 (k6 REST API) exposed to host from this service.
   k6:
-    image: grafana/k6:${K6_VERSION:-1.6.1}
+    image: grafana/k6:${K6_VERSION:-2.2.0}
     container_name: k6-runner
     profiles:
       - run
