@@ -21,8 +21,8 @@ on:
     paths:
       # Only run when app code or perf tests change
       - "src/**"
-      - "k6-framework/clients/**"
-      - "k6-framework/src/**"
+      - "clients/**"
+      - "src/**"
 
   # Allow manual trigger for debugging
   workflow_dispatch:
@@ -65,19 +65,16 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: k6-framework/package-lock.json
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: k6-framework
         run: npm ci --prefer-offline
 
       - name: Build TypeScript
-        working-directory: k6-framework
         run: npm run build
 
       - name: Run quality gate (smoke profile)
         id: quality-gate
-        working-directory: k6-framework
         env:
           # T-088: Support TEST_CONFIG env var for inline config
           TEST_CONFIG: ${{ vars.PERF_TEST_CONFIG }}
@@ -112,7 +109,6 @@ jobs:
 
       - name: Generate quality gate report
         if: always()
-        working-directory: k6-framework
         run: |
           node bin/generate-report.js \
             --input "reports/gate-${{ github.event.inputs.client || '_reference' }}-${{ github.run_id }}.json" \
@@ -124,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: perf-gate-report-${{ github.run_id }}
-          path: k6-framework/reports/gate-*-${{ github.run_id }}.*
+          path: reports/gate-*-${{ github.run_id }}.*
           retention-days: 14
 
       - name: Post PR comment with results

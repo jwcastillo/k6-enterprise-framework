@@ -83,18 +83,15 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: k6-framework/package-lock.json
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: k6-framework
         run: npm ci --prefer-offline
 
       - name: Build TypeScript
-        working-directory: k6-framework
         run: npm run build
 
       - name: Validate client config
-        working-directory: k6-framework
         run: |
           node bin/validate-config.js \
             --client="${{ github.event.inputs.client }}" \
@@ -102,7 +99,6 @@ jobs:
 
       - name: Run smoke test
         id: run-test
-        working-directory: k6-framework
         env:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
           NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
@@ -123,7 +119,6 @@ jobs:
 
       - name: Generate HTML report
         if: always()
-        working-directory: k6-framework
         run: |
           node bin/generate-report.js \
             --input "reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.json" \
@@ -135,7 +130,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: perf-smoke-report-${{ github.run_id }}
-          path: k6-framework/reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.*
+          path: reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.*
           retention-days: 30
 
       - name: Post result summary

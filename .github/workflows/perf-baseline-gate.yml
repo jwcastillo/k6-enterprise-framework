@@ -40,7 +40,7 @@ on:
         required: true
         default: "staging"
       baseline:
-        description: "Path to committed baseline JSON (relative to k6-framework/)"
+        description: "Path to committed baseline JSON (relative to the repo root)"
         required: true
         default: "reports/baseline.json"
 
@@ -109,14 +109,12 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
-          cache-dependency-path: k6-framework/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: "Install dependencies"
-        working-directory: k6-framework
         run: pnpm install --frozen-lockfile
 
       - name: "Build TypeScript bundle"
-        working-directory: k6-framework
         run: pnpm run build
 
       # ── 5. Run baseline gate ─────────────────────────────────────────────────
@@ -128,7 +126,6 @@ jobs:
       # failing. To activate the gate, commit a baseline JSON to the repo first.
       - name: "Run baseline regression gate"
         id: gate
-        working-directory: k6-framework
         env:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
         run: |
@@ -174,8 +171,8 @@ jobs:
         with:
           name: "baseline-gate-${{ github.event.inputs.client || inputs.client || '_reference' }}-${{ github.run_id }}"
           path: |
-            k6-framework/reports/baseline-current-${{ github.run_id }}.json
-            k6-framework/reports/baseline-current-${{ github.run_id }}.html
+            reports/baseline-current-${{ github.run_id }}.json
+            reports/baseline-current-${{ github.run_id }}.html
           retention-days: 14
           if-no-files-found: warn
 
