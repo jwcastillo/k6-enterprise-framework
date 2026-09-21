@@ -50,6 +50,7 @@ STORY_ID="${K6_STORY:-}"
 STORY_URL="${K6_STORY_URL:-}"
 SKIP_BUILD="${K6_SKIP_BUILD:-false}"
 SKIP_COMPARE="${K6_SKIP_COMPARE:-false}"
+GATE_BASELINE="${K6_GATE_BASELINE:-}"
 SKIP_VALIDATE="${K6_SKIP_VALIDATE:-false}"
 LIST_PROFILES="${LIST_PROFILES:-false}"
 BATCH_INDEX=""
@@ -88,6 +89,10 @@ LIST_EXTENSIONS_FLAG="false"
 K6_CACHE_DIR="${K6_CACHE_DIR:-${ROOT_DIR}/.k6-cache}"
 # SEC-02: CLI auth token provided at invocation time (--auth-token flag or env)
 AUTH_TOKEN_PROVIDED="${K6_AUTH_TOKEN_PROVIDED:-}"
+# K6V2-01: k6 v2 end-of-test stdout summary mode (compact|full|disabled; default = compact via k6)
+SUMMARY_MODE="${K6_SUMMARY_MODE:-}"
+# K6V2-02: k6 v2 native secret source passthrough — INDEPENDENT of framework K6_SECRETS_BACKENDS layer
+SECRET_SOURCE="${K6_SECRET_SOURCE:-}"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -216,10 +221,21 @@ ${BOLD}── Output ───────────────────�
   --skip-build           Skip npm build step (use existing dist/)
   --skip-validate        Skip config validation step
   --skip-compare         Skip auto-comparison step
+  --gate-baseline=<file>  Run k6-compare regression gate (<file> vs this run's summary).
+                         A failed gate (regression, load-model mismatch, or degraded)
+                         surfaces as exit 99. Also set via K6_GATE_BASELINE.
   --list-profiles        Show profiles table and exit
   --editorial-report     Generate editorial HTML report via k6-report
                          Requires: npm run build in ../k6-report/
                          Also set via K6_EDITORIAL_REPORT=1 env var
+  --summary-mode <mode>  k6 v2 end-of-test stdout summary mode: compact|full|disabled
+                         compact = concise (k6 v2 default), full = verbose, disabled = suppress
+                         Does NOT affect handleSummary data shape or --summary-export JSON.
+                         Also set via K6_SUMMARY_MODE env var
+  --secret-source <src>  Forward a k6 NATIVE secret source to k6 v2 (--secret-source).
+                         Forwards verbatim; k6 owns validation of the source spec.
+                         INDEPENDENT of the framework K6_SECRETS_BACKENDS / resolveSecret layer.
+                         Also set via K6_SECRET_SOURCE env var (note: singular SECRET, not SECRETS)
 
 ${BOLD}── Observability ─────────────────────────────────────────────────────────${RESET}
   --prometheus [url]     Enable Prometheus remote-write output
@@ -390,9 +406,15 @@ while [[ $# -gt 0 ]]; do
     --story-url)      STORY_URL="$2";                shift 2 ;;
     --skip-build)     SKIP_BUILD="true";             shift   ;;
     --skip-validate)  SKIP_VALIDATE="true";          shift   ;;
-    --skip-compare)   SKIP_COMPARE="true";           shift   ;;
-    --auth-token=*)   AUTH_TOKEN_PROVIDED="${1#*=}";  shift   ;;
+    --skip-compare)   SKIP_COMPARE="true";              shift   ;;
+    --gate-baseline=*) GATE_BASELINE="${1#*=}";        shift   ;;
+    --gate-baseline)  GATE_BASELINE="$2";              shift 2 ;;
+    --auth-token=*)   AUTH_TOKEN_PROVIDED="${1#*=}";   shift   ;;
     --auth-token)     AUTH_TOKEN_PROVIDED="$2";       shift 2 ;;
+    --summary-mode=*) SUMMARY_MODE="${1#*=}";         shift   ;;
+    --summary-mode)   SUMMARY_MODE="$2";              shift 2 ;;
+    --secret-source=*) SECRET_SOURCE="${1#*=}";       shift   ;;
+    --secret-source)  SECRET_SOURCE="$2";             shift 2 ;;
     --debug)          DEBUG="true";                  shift   ;;
     --structured-logs) STRUCTURED_LOGS="true";       shift   ;;
     --dry-run)        DRY_RUN="true";                 shift ;;
@@ -1091,7 +1113,7 @@ if ! node "${SCRIPT_DIR}/check-rbac.js" \
     --client="${CLIENT}" \
     --profile="${PROFILE}" \
     --root="${ROOT_DIR}" \
-    "${_RBAC_ARGS[@]}" 2>&1; then
+    ${_RBAC_ARGS[@]+"${_RBAC_ARGS[@]}"} 2>&1; then
   log_error "Permission denied: user is not authorized to run profile '${PROFILE}' on client '${CLIENT}' (RBAC). Set K6_RBAC_PERMISSIVE=true to bypass (audit logged)."
   exit 1
 fi
@@ -1228,6 +1250,22 @@ if [[ "${OTEL_OUT}" == "true" ]]; then
   log_info "OpenTelemetry metrics output enabled"
 fi
 
+# ── K6V2-01: Summary mode passthrough ─────────────────────────────────────
+if [[ -n "${SUMMARY_MODE}" ]]; then
+  case "${SUMMARY_MODE}" in
+    compact|full|disabled) ;;
+    *) log_error "--summary-mode must be compact, full, or disabled (got: '${SUMMARY_MODE}')"; exit 1 ;;
+  esac
+  K6_CMD=("${K6_CMD[@]:0:${#K6_CMD[@]}-1}" --summary-mode "${SUMMARY_MODE}" "${K6_CMD[@]: -1}")
+  log_info "Summary mode: ${SUMMARY_MODE}"
+fi
+
+# ── K6V2-02: k6 native secret source passthrough (independent of K6_SECRETS_BACKENDS) ──
+if [[ -n "${SECRET_SOURCE}" ]]; then
+  K6_CMD=("${K6_CMD[@]:0:${#K6_CMD[@]}-1}" --secret-source "${SECRET_SOURCE}" "${K6_CMD[@]: -1}")
+  log_info "k6 native secret source: ${SECRET_SOURCE}"
+fi
+
 # k6 v1.0+ web dashboard — exports interactive HTML with time-series charts
 export K6_WEB_DASHBOARD=true
 export K6_WEB_DASHBOARD_EXPORT="${HTML_REPORT}"
@@ -1313,6 +1351,43 @@ else
   else
     log_warn "Auto-comparison skipped (no baseline or error: exit ${COMPARE_EXIT})"
     echo "" > "${COMPARISON_MD}"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4b: Regression gate (k6-compare) — opt-in via --gate-baseline / K6_GATE_BASELINE
+# Separate from Step 4 (multi-run auto-comparison report). Runs only when a
+# baseline file is supplied; otherwise behavior is byte-for-byte unchanged.
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -n "${GATE_BASELINE}" ]]; then
+  if [[ ! -f "${GATE_BASELINE}" ]]; then
+    log_warn "Regression gate baseline not found: ${GATE_BASELINE} — skipping gate"
+  elif [[ ! -f "${SUMMARY_JSON}" ]]; then
+    log_warn "No summary JSON — skipping regression gate"
+  else
+    log_step "Step 4b — Regression gate (k6-compare)"
+    GATE_EXIT=0
+    bash "${SCRIPT_DIR}/compare.sh" "${GATE_BASELINE}" "${SUMMARY_JSON}" || GATE_EXIT=$?
+    case "${GATE_EXIT}" in
+      0)
+        log_success "Regression gate passed (no regression vs baseline)"
+        ;;
+      3)
+        log_warn "Regression gate FAILED — metrics regressed vs baseline"
+        if [[ "${FINAL_EXIT}" -eq 0 ]]; then FINAL_EXIT=99; fi
+        ;;
+      5)
+        log_warn "Regression gate FAILED — load-model mismatch (open vs closed)"
+        if [[ "${FINAL_EXIT}" -eq 0 ]]; then FINAL_EXIT=99; fi
+        ;;
+      1)
+        log_warn "Regression gate reported degradation/error (exit 1)"
+        if [[ "${FINAL_EXIT}" -eq 0 ]]; then FINAL_EXIT=99; fi
+        ;;
+      *)
+        log_warn "Regression gate inconclusive (exit ${GATE_EXIT})"
+        ;;
+    esac
   fi
 fi
 

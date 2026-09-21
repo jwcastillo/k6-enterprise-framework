@@ -94,26 +94,24 @@ jobs:
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
         with:
-          k6-version: "0.54.0"
+          k6-version: "2.2.0"
 
+      - uses: pnpm/action-setup@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: k6-framework/package-lock.json
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: k6-framework
-        run: npm ci --prefer-offline
+        run: pnpm install --frozen-lockfile --config.strictDepBuilds=false
 
       - name: Build TypeScript
-        working-directory: k6-framework
         run: npm run build
 
       - name: Run regression suite
         id: regression
-        working-directory: k6-framework
         env:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
           NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
@@ -148,7 +146,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: regression-${{ steps.regression.outputs.client }}-${{ steps.regression.outputs.suite }}-${{ github.run_id }}
-          path: k6-framework/reports/${{ steps.regression.outputs.client }}/regression/
+          path: reports/${{ steps.regression.outputs.client }}/regression/
           retention-days: 90
 
       - name: Set job summary

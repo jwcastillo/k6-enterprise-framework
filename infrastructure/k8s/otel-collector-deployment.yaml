@@ -5,7 +5,7 @@
 # and NOT Sidecar (would couple the collector lifecycle to each k6 pod and defeat
 # the centralization goal).
 #
-# Image otel/opentelemetry-collector-contrib:0.152.0 matches the docker-compose pin
+# Image otel/opentelemetry-collector-contrib:0.161.0 matches the docker-compose pin
 # in infrastructure/.env.example (08-01). Tag-only pinning is intentional for this
 # phase; digest pinning is a milestone-level SEC follow-up shared with the other
 # observability images (Tempo, Pyroscope, Loki, Prometheus, Grafana).
@@ -103,7 +103,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.152.0
+          image: otel/opentelemetry-collector-contrib:0.161.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config=/etc/otelcol-contrib/config.yaml"
