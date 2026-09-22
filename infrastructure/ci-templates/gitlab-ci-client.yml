@@ -79,6 +79,10 @@ k6:smoke:
     when: always
     paths:
       - /framework/reports/${K6_CLIENT}/
+    reports:
+      # One test case per k6 threshold and per check — failed thresholds show up
+      # in the MR widget instead of only in the job log.
+      junit: /framework/reports/${K6_CLIENT}/**/junit-*.xml
     expire_in: 30 days
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -101,6 +105,10 @@ k6:load:
     when: always
     paths:
       - /framework/reports/${K6_CLIENT}/
+    reports:
+      # One test case per k6 threshold and per check — failed thresholds show up
+      # in the MR widget instead of only in the job log.
+      junit: /framework/reports/${K6_CLIENT}/**/junit-*.xml
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == "main"

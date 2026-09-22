@@ -8,6 +8,13 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 ## [Unreleased]
 
 ### Added
+- **Capacity search** (`bin/find-capacity.js`) — finds the highest sustainable arrival rate: exponential ramp, binary search, confirmation runs. A step fails on a crossed threshold, dropped iterations, or an achieved rate below 95% of the requested one; a broken script or environment aborts the search instead of being recorded as a limit. Refuses non-local targets without `--i-own-this-target`.
+- **Arrival-rate overrides** — `K6_ARRIVAL_RATE` and `K6_STEP_DURATION` replace the `rate` and `duration` of an arrival-rate profile and scale its VU pool. Unset, profiles behave exactly as declared.
+- **Gate self-test** (`bin/testing/gate-selftest.sh`) — proves end to end that the gates fail when they must: healthy target exits 0, 20% injected errors exits 99, 300ms injected latency exits 1 via the auto-comparison.
+- **Failure triage** (`bin/triage-failures.js`) — classifies the error lines of a run's k6 log into cause + owner (system under test / test / environment) via TypeSafe. Opt-in with `K6_TRIAGE=true` and `TYPESAFE_API_KEY`; signatures are redacted before anything leaves the machine.
+- **Target guard** (`bin/target-guard.js`) — refuses to launch k6 when a `baseUrl` embeds credentials, when a host is outside the client's `allowedHosts`, or when a non-`smoke`/`quick` profile targets a `prod*` environment (override with `K6_ALLOW_PROD_LOAD=true`). Runs before every test, not bypassable with `--skip-validate`.
+- **JUnit XML export** (`bin/junit.js`) — `junit-<timestamp>.xml` per run, one test case per threshold and per check; wired into `artifacts:reports:junit` in the GitLab CI template.
+- **Prometheus alert rules** (`infrastructure/prometheus/alerts/k6-alerts.yml`) — error rate, p95/p99 latency, failing checks and stalled throughput, all scoped `by (run_id)` and gated on `k6_vus > 0` so nothing fires between runs.
 - **p99.9 thresholds** on formal load profiles (smoke, quick, load, rampup, capacity, soak, throughput-*). Captures the tail latency that p99 hides.
 - **VU-based variants** preserved as `load-vu`, `stress-vu`, `spike-vu`, `soak-vu` for special cases where VU concurrency is the metric of interest.
 - **`observability/http-safe.ts`** — canonical `fetchSafe()` (timeout + AbortController + structured errors + auto-masking) consolidated from three reimplementations.
@@ -18,6 +25,7 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 ### Changed
 - ⚠️ **BREAKING — Open-model defaults**: `load`, `stress`, `spike`, `soak` profiles now use arrival-rate executors (`ramping-arrival-rate` / `constant-arrival-rate`) instead of `ramping-vus`. This eliminates coordinated omission — when the SUT slows down, requests keep arriving at the target rate instead of VUs piling up in waits, so reported percentiles reflect what real users experience. Scenarios that depend on the prior closed-model semantics must switch to `load-vu`/`stress-vu`/`spike-vu`/`soak-vu`, or adopt the new open-model behavior (recommended).
 - ⚠️ **BREAKING — `PrometheusClient` removed from `src/metrics/metrics-engine.ts`**. The canonical client is now `src/ai/observability/observability-clients.ts::PrometheusClient`, which returns the unified `ObservabilityResult` schema. The deleted class had no in-tree callers; out-of-tree consumers (none known) must migrate.
+- `run-test.sh` now accepts the `throughput-low|medium|high|ramp` profiles. They were declared in `ProfileName`, `shared/profiles/` and `PROFILES`, but the CLI allowlist rejected them, so they were unreachable.
 - `helpers/data-helper::randomItem` now accepts `readonly T[]` so callers passing `as const` arrays no longer need a cast.
 
 ### Deprecated

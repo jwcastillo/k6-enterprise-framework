@@ -262,6 +262,10 @@ ${BOLD}── Observability ─────────────────�
                          Node CPU overhead would invalidate measurements.
                          Env: K6_PYROSCOPE_CONTINUOUS=true.
   --observability        Enable Prometheus + Loki + Tempo (full observability)
+  K6_TRIAGE=true         After the run, classify the error lines of the k6 log
+                         into cause + owner (system under test / test / environment)
+                         via TypeSafe. Needs TYPESAFE_API_KEY; signatures are
+                         redacted before leaving the machine. Writes triage-<ISO>.txt.
 
 ${BOLD}── Gating (T-261) ────────────────────────────────────────────────────────${RESET}
   Scenarios marked with \`export const gate = "<kind>"\` are blocked by default.
@@ -605,7 +609,7 @@ log_debug_safe() {
   echo "${msg}" | sed -E "s/([A-Z_]*(${_secret_name_re})[A-Z_]*)=[^ ]*/\1=****/gI" || true
 }
 
-VALID_PROFILES="smoke quick load rampup capacity stress spike breakpoint soak"
+VALID_PROFILES="smoke quick load rampup capacity stress spike breakpoint soak throughput-low throughput-medium throughput-high throughput-ramp"
 if ! echo "${VALID_PROFILES}" | grep -qw "${PROFILE}"; then
   log_error "Profile '${PROFILE}' not found. Available: smoke (1 VU, 1m), quick (5 VUs, 3m), load (20 VUs, 14m), rampup (50 VUs, 13m), capacity (200 VUs, 20m), stress (400 VUs, 25m), spike (300 VUs, 5m), breakpoint (1000 VUs, 1h), soak (20 VUs, 4h+)"
   echo ""
@@ -702,6 +706,8 @@ ERROR_LOG="${ARTIFACTS_DIR}/error-log-${ISO_TIMESTAMP}.log"
 UNEXPECTED_ERRORS_JSON="${ARTIFACTS_DIR}/errors-${ISO_TIMESTAMP}.json"
 ANALYSIS_MD="${ARTIFACTS_DIR}/analysis-${ISO_TIMESTAMP}.md"
 MESSAGE_MD="${ARTIFACTS_DIR}/message-${ISO_TIMESTAMP}.md"
+JUNIT_XML="${ARTIFACTS_DIR}/junit-${ISO_TIMESTAMP}.xml"
+TRIAGE_TXT="${ARTIFACTS_DIR}/triage-${ISO_TIMESTAMP}.txt"
 
 # Keep legacy RUN_ID for internal references
 RUN_ID="${CLIENT}_${SCENARIO_SLUG}_${PROFILE}_${ISO_TIMESTAMP}"
@@ -893,6 +899,15 @@ if [[ -n "${EXTENSIONS}" ]]; then
   # Export for report enrichment (T-148: extensions in JSON output)
   export K6_ACTIVE_EXTENSIONS="${EXTENSIONS}"
   unset _EXT_LIST _EXT_SORTED _EXT_KEY _BUILD_ARGS _UNKNOWN_EXTS _ext _CACHE_BINARY
+fi
+
+# ── Target guard: never fire load at a target the config does not allow ──
+# Not bypassable with --skip-validate. Override the production check with
+# K6_ALLOW_PROD_LOAD=true, or list permitted hosts in the client config
+# (allowedHosts). See docs-site/docs/framework/security/target-guard.md
+if ! node "${SCRIPT_DIR}/target-guard.js" --client="${CLIENT}" --env="${ENV}" --profile="${PROFILE}"; then
+  log_error "Target guard refused this run. Fix the config or set K6_ALLOW_PROD_LOAD=true."
+  exit 107
 fi
 
 # ── T-167: Dry-run — show execution plan without running ─────────────────────
@@ -1158,6 +1173,10 @@ K6_CMD=(
   --env "K6_OTEL_GRPC_EXPORTER_ENDPOINT=${OTEL_GRPC_EXPORTER_ENDPOINT}"
   --env "K6_OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES_FINAL}"
   --env "K6_LOKI_URL=${LOKI_URL}"
+  # Capacity search (bin/find-capacity.js) drives the rate per step. Empty when unset,
+  # which leaves the profile's own rate and duration untouched.
+  --env "K6_ARRIVAL_RATE=${K6_ARRIVAL_RATE:-}"
+  --env "K6_STEP_DURATION=${K6_STEP_DURATION:-}"
   --tag "test_name=${RUN_ID}"
   --tag "client=${CLIENT}"
   --tag "environment=${ENV}"
@@ -1395,6 +1414,28 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 log_step "Step 5/6 — Generating report artifacts"
 
+# ── JUnit XML: one testcase per threshold and per check, for CI test reporters ──
+# (GitLab artifacts:reports:junit, GitHub test reporters). Never fails the run —
+# gating is bin/slo-report.js's job.
+if [[ -f "${SUMMARY_JSON}" ]]; then
+  node "${SCRIPT_DIR}/junit.js" \
+    --summary="${SUMMARY_JSON}" \
+    --out="${JUNIT_XML}" \
+    --suite="k6 ${CLIENT}/${SCENARIO}" >/dev/null 2>&1 || log_warn "JUnit export failed (non-fatal)"
+fi
+
+# ── Failure triage: who owns the failures — the SUT, the test, or the environment ──
+# Opt-in twice over: K6_TRIAGE=true AND a TYPESAFE_API_KEY. Log signatures are redacted
+# (JWTs, URLs, hosts, IPs, emails, ids) before anything is sent.
+# See docs-site/docs/framework/ai/failure-triage.md
+if [[ "${K6_TRIAGE:-false}" == "true" ]] && [[ -n "${TYPESAFE_API_KEY:-}" ]] && [[ -f "${K6_LOG}" ]]; then
+  if node "${SCRIPT_DIR}/triage-failures.js" "${K6_LOG}" > "${TRIAGE_TXT}" 2>&1; then
+    cat "${TRIAGE_TXT}"
+  else
+    log_warn "Failure triage failed (non-fatal) — see ${TRIAGE_TXT}"
+  fi
+fi
+
 # Generate all artifacts via generate-artifacts.js (CSV, HTML banner, analysis MD, message MD, JSON enrichment)
 if [[ -f "${SUMMARY_JSON}" ]]; then
   _ARTIFACT_ARGS=(
@@ -1613,6 +1654,8 @@ echo -e "  ${BOLD}Artifacts:${RESET}"
 [[ -f "${UNEXPECTED_ERRORS_JSON}" ]] && echo -e "    ${RED}[!!]${RESET} errors-json  → ${UNEXPECTED_ERRORS_JSON}" || echo -e "    ${GREEN}[OK]${RESET} errors-json  (no unexpected status)"
 [[ -f "${ANALYSIS_MD}" ]]  && echo -e "    ${GREEN}[OK]${RESET} analysis-md  → ${ANALYSIS_MD}"  || echo -e "    ${YELLOW}[--]${RESET} analysis-md  (not generated)"
 [[ -f "${MESSAGE_MD}" ]]   && echo -e "    ${GREEN}[OK]${RESET} message-md   → ${MESSAGE_MD}"   || echo -e "    ${YELLOW}[--]${RESET} message-md   (not generated)"
+[[ -f "${JUNIT_XML}" ]]    && echo -e "    ${GREEN}[OK]${RESET} junit-xml    → ${JUNIT_XML}"    || echo -e "    ${YELLOW}[--]${RESET} junit-xml    (not generated)"
+[[ -f "${TRIAGE_TXT}" ]]   && echo -e "    ${GREEN}[OK]${RESET} triage       → ${TRIAGE_TXT}"       || echo -e "    ${YELLOW}[--]${RESET} triage       (needs K6_TRIAGE=true + TYPESAFE_API_KEY)"
 [[ -f "${EDITORIAL_HTML:-}" ]] && echo -e "    ${GREEN}[OK]${RESET} editorial    → ${EDITORIAL_HTML}" || { [[ "${EDITORIAL_REPORT}" == "1" ]] && echo -e "    ${YELLOW}[--]${RESET} editorial    (generation failed)"; }
 echo ""
 

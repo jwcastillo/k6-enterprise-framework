@@ -64,6 +64,12 @@ export const CONFIG_SCHEMA = {
       format: "uri",
       description: "Base URL of the service under test",
     },
+    allowedHosts: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Hostnames this client may fire load at. When set, bin/target-guard.js refuses any baseUrl whose host is not listed.",
+    },
     endpoints: {
       type: "object",
       additionalProperties: {
