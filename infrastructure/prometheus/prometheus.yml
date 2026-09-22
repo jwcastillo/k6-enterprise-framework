@@ -4,6 +4,9 @@ global:
   external_labels:
     monitor: "k6-enterprise-framework"
 
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
