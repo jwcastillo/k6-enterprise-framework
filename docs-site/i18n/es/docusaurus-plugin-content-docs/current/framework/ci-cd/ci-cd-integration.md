@@ -35,6 +35,26 @@ Un **quality gate** es un conjunto de umbrales de rendimiento que deben cumplirs
 | `2`  | Error de ejecución (servicio no disponible, configuración inválida) | Investigar infraestructura / corregir configuración |
 | `99` | Fallo de umbral con datos parciales | Revisar resultados parciales, decidir manualmente |
 
+### Comprobar que los gates fallan de verdad
+
+Un gate que nunca falla no sirve, y los tests unitarios no lo prueban end to end.
+`bin/testing/gate-selftest.sh` corre un escenario fijo contra `bin/mock-server.js` tres
+veces con fallas inyectadas, y verifica el exit code en cada una:
+
+| Caso | Inyectado | Esperado |
+| --- | --- | --- |
+| Target sano | nada | exit `0` |
+| Target roto | `--error-rate=0.2` | exit `99` (thresholds cruzados) |
+| Target degradado | `--latency=300` | exit `1` (thresholds pasan, la auto-comparacion marca la regresion) |
+
+```bash
+bash bin/testing/gate-selftest.sh
+```
+
+Solo habla con `127.0.0.1`, necesita k6 en el PATH y tarda unos minutos (tres corridas
+reales). Correlo despues de tocar thresholds, profiles, el motor de comparacion o el mapeo
+de exit codes.
+
 ### Configuración de Umbrales
 
 Los umbrales se definen en la configuración de tu cliente:
@@ -230,6 +250,33 @@ Configurar en `Settings → CI/CD → Variables` como **Protected** y **Masked**
 ---
 
 ## 4. Patrones Avanzados
+
+### 4.0 Reportes JUnit
+
+Cada corrida escribe `junit-<timestamp>.xml` junto a sus demas artefactos: un `<testcase>`
+por cada threshold de k6 y uno por cada check. Los reporters de CI muestran asi un threshold
+fallado como un test fallado, en vez de dejarlo enterrado en el log del job.
+
+GitLab lo toma con `artifacts:reports:junit` (ya cableado en
+`infrastructure/ci-templates/gitlab-ci-client.yml`):
+
+```yaml
+artifacts:
+  when: always
+  reports:
+    junit: /framework/reports/${K6_CLIENT}/**/junit-*.xml
+```
+
+GitHub Actions lo sube junto con el resto del directorio de reportes; para verlo en la
+pestana Checks, agrega la test-reporter action que prefieras apuntando a `**/junit-*.xml`.
+
+Generarlo aparte desde cualquier summary export:
+
+```bash
+node bin/junit.js --summary=reports/my-client/api_smoke/summary-20260921-120000.json
+```
+
+El exportador nunca hace fallar una corrida — el gating sigue siendo de `bin/slo-report.js`.
 
 ### 4.1 Configuración Inline vía `TEST_CONFIG`
 

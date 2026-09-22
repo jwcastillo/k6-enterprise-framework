@@ -714,3 +714,30 @@ Detener sin perder datos:
 ```bash
 docker compose --profile observability stop
 ```
+
+## Reglas de Alerta
+
+Prometheus carga todo `*.yml` bajo `infrastructure/prometheus/alerts/` (montado read-only en
+`/etc/prometheus/alerts`). `k6-alerts.yml` trae cinco reglas genericas:
+
+| Alerta | Dispara cuando | Severidad |
+| --- | --- | --- |
+| `K6HighErrorRate` | requests fallidos > 5% por 2m | critical |
+| `K6SlowResponseTime` | p95 > 500ms por 2m | warning |
+| `K6VerySlowResponseTime` | p99 > 1000ms por 2m | critical |
+| `K6FailingChecks` | tasa de checks OK < 100% por 1m | warning |
+| `K6LowThroughput` | < 10 req/s con VUs activos, por 3m | warning |
+
+Cada regla agrupa `by (run_id)` y esta condicionada a `k6_vus > 0`, asi no dispara nada
+entre corridas — una alerta que esta siempre firing es una alerta que nadie lee.
+
+Los umbrales son genericos a proposito. Los SLO por cliente van en
+`clients/<client>/config/slos.json` y los evalua `bin/slo-report.js`.
+
+Validar cambios antes de commitear:
+
+```bash
+docker run --rm --entrypoint promtool \
+  -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
+  prom/prometheus:v3.14.0 check rules /etc/prometheus/alerts/k6-alerts.yml
+```

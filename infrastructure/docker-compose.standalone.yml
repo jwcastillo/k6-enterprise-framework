@@ -86,6 +86,7 @@ services:
     volumes:
       - prometheus-data:/prometheus
       - ./prometheus/prometheus-standalone.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
     networks:
       - k6-net
     restart: unless-stopped

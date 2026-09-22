@@ -1,0 +1,66 @@
+# k6 load-test alert rules.
+#
+# Metric names follow this stack's Prometheus remote-write output with
+# K6_PROMETHEUS_RW_TREND_STATS=avg,min,med,max,p(90),p(95),p(99) — trend stats arrive as
+# separate series (k6_http_req_duration_p95), not as a `quantile` label.
+#
+# Every rule is scoped `by (run_id)` so a firing alert names the run it belongs to, and
+# each one is gated on `k6_vus > 0` so nothing fires between tests — an alert that is
+# always firing is an alert nobody reads.
+#
+# Thresholds here are generic defaults. Per-client SLOs belong in
+# clients/<client>/config/slos.json and are enforced by bin/slo-report.js.
+
+groups:
+  - name: k6_alerts
+    interval: 30s
+    rules:
+      - alert: K6HighErrorRate
+        expr: 100 * max by (run_id) (k6_http_req_failed_rate) > 5 and on (run_id) max by (run_id) (k6_vus) > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: k6
+        annotations:
+          summary: "High error rate in k6 run {{ $labels.run_id }}"
+          description: "Failed requests at {{ $value | printf \"%.1f\" }}% (threshold 5%)."
+
+      - alert: K6SlowResponseTime
+        expr: max by (run_id) (k6_http_req_duration_p95) > 500 and on (run_id) max by (run_id) (k6_vus) > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: k6
+        annotations:
+          summary: "Slow p95 in k6 run {{ $labels.run_id }}"
+          description: "p95 response time is {{ $value | printf \"%.0f\" }}ms (threshold 500ms)."
+
+      - alert: K6VerySlowResponseTime
+        expr: max by (run_id) (k6_http_req_duration_p99) > 1000 and on (run_id) max by (run_id) (k6_vus) > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: k6
+        annotations:
+          summary: "Very slow p99 in k6 run {{ $labels.run_id }}"
+          description: "p99 response time is {{ $value | printf \"%.0f\" }}ms (threshold 1000ms)."
+
+      - alert: K6FailingChecks
+        expr: 100 * min by (run_id) (k6_checks_rate) < 100 and on (run_id) max by (run_id) (k6_vus) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: k6
+        annotations:
+          summary: "Failing checks in k6 run {{ $labels.run_id }}"
+          description: "Check pass rate is {{ $value | printf \"%.1f\" }}% — at least one check is failing."
+
+      - alert: K6LowThroughput
+        expr: sum by (run_id) (rate(k6_http_reqs_total[1m])) < 10 and on (run_id) max by (run_id) (k6_vus) > 0
+        for: 3m
+        labels:
+          severity: warning
+          component: k6
+        annotations:
+          summary: "Low throughput in k6 run {{ $labels.run_id }}"
+          description: "Throughput is {{ $value | printf \"%.1f\" }} req/s with VUs still active (threshold 10 req/s) — the generator or the target may be stalled."

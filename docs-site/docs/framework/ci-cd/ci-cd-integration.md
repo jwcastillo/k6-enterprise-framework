@@ -35,6 +35,25 @@ A **quality gate** is a set of performance thresholds that must pass before a bu
 | `2`  | Execution error (service unavailable, config invalid) | Investigate infra / fix config |
 | `99` | Threshold failure with partial data | Review partial results, decide manually |
 
+### Proving the Gates Actually Fail
+
+A gate that never fails is worthless, and unit tests do not prove it end to end.
+`bin/testing/gate-selftest.sh` runs a fixed scenario against `bin/mock-server.js` three
+times with faults injected, and asserts the exit code each time:
+
+| Case | Injected | Expected |
+| --- | --- | --- |
+| Healthy target | nothing | exit `0` |
+| Broken target | `--error-rate=0.2` | exit `99` (thresholds crossed) |
+| Degraded target | `--latency=300` | exit `1` (thresholds pass, auto-comparison flags the regression) |
+
+```bash
+bash bin/testing/gate-selftest.sh
+```
+
+It only talks to `127.0.0.1`, needs k6 on PATH, and takes a few minutes (three real runs).
+Run it after touching thresholds, profiles, the comparison engine or the exit-code mapping.
+
 ### Threshold Configuration
 
 Thresholds are defined in your client config:
@@ -230,6 +249,33 @@ Configure in `Settings → CI/CD → Variables` as **Protected** and **Masked**:
 ---
 
 ## 4. Advanced Patterns
+
+### 4.0 JUnit Test Reports
+
+Every run writes `junit-<timestamp>.xml` next to its other artifacts: one `<testcase>` per
+k6 threshold and one per check. CI test reporters then show a failed threshold as a failed
+test instead of burying it in the job log.
+
+GitLab picks it up through `artifacts:reports:junit` (already wired in
+`infrastructure/ci-templates/gitlab-ci-client.yml`):
+
+```yaml
+artifacts:
+  when: always
+  reports:
+    junit: /framework/reports/${K6_CLIENT}/**/junit-*.xml
+```
+
+GitHub Actions uploads it with the rest of the reports directory; to surface it in the
+Checks tab, add a test-reporter action of your choice pointed at `**/junit-*.xml`.
+
+Generate it on its own from any summary export:
+
+```bash
+node bin/junit.js --summary=reports/my-client/api_smoke/summary-20260921-120000.json
+```
+
+The exporter never fails a run — quality gating stays with `bin/slo-report.js`.
 
 ### 4.1 Inline Config via `TEST_CONFIG`
 

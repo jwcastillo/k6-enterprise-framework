@@ -295,4 +295,57 @@ describe("ProfileLoader", () => {
       expect(options.maxDuration).toBeDefined();
     });
   });
+
+  // ── K6_ARRIVAL_RATE / K6_STEP_DURATION overrides (bin/find-capacity.js) ────
+
+  describe("arrival-rate overrides", () => {
+    const env = () => (globalThis as unknown as { __ENV: Record<string, string> }).__ENV;
+    const scenarioOf = (name: Parameters<typeof profileToOptions>[0]) =>
+      (profileToOptions(name).scenarios as Record<string, Record<string, unknown>>).default;
+
+    beforeEach(() => {
+      delete env()["K6_ARRIVAL_RATE"];
+      delete env()["K6_STEP_DURATION"];
+    });
+
+    it("uses the profile's own rate when nothing is set", () => {
+      expect(scenarioOf("throughput-low").rate).toBe(10);
+    });
+
+    it("overrides the rate and the step duration", () => {
+      env()["K6_ARRIVAL_RATE"] = "137";
+      env()["K6_STEP_DURATION"] = "30s";
+      const scenario = scenarioOf("throughput-low");
+      expect(scenario.rate).toBe(137);
+      expect(scenario.duration).toBe("30s");
+    });
+
+    it("raises the VU pool so the generator can keep up with the rate", () => {
+      env()["K6_ARRIVAL_RATE"] = "500";
+      const scenario = scenarioOf("throughput-low");
+      expect(scenario.preAllocatedVUs).toBeGreaterThanOrEqual(1000);
+      expect(scenario.maxVUs).toBeGreaterThanOrEqual(2000);
+    });
+
+    it("never lowers the VU pool below the profile's own", () => {
+      env()["K6_ARRIVAL_RATE"] = "1";
+      const scenario = scenarioOf("throughput-high");
+      expect(scenario.preAllocatedVUs).toBe(120);
+      expect(scenario.maxVUs).toBe(300);
+    });
+
+    it("ignores a rate that is not a positive number", () => {
+      for (const bad of ["0", "-5", "abc", ""]) {
+        env()["K6_ARRIVAL_RATE"] = bad;
+        expect(scenarioOf("throughput-low").rate).toBe(10);
+      }
+    });
+
+    it("leaves VU-based profiles untouched", () => {
+      env()["K6_ARRIVAL_RATE"] = "137";
+      const options = profileToOptions("smoke");
+      expect(options.scenarios).toBeUndefined();
+      expect(options.stages).toBeDefined();
+    });
+  });
 });
