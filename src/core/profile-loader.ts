@@ -353,9 +353,21 @@ export function profileToOptions(
     };
 
     if (profile.executor === "constant-arrival-rate") {
-      scenario.rate = profile.rate;
+      // bin/find-capacity.js drives one rate per step through these two env vars.
+      // Unset (the normal case), the profile's own numbers apply untouched.
+      const rate = Number(__ENV["K6_ARRIVAL_RATE"]);
+      const overridden = Number.isFinite(rate) && rate > 0;
+
+      scenario.rate = overridden ? rate : profile.rate;
       scenario.timeUnit = profile.timeUnit ?? "1s";
-      scenario.duration = profile.duration;
+      scenario.duration = __ENV["K6_STEP_DURATION"] || profile.duration;
+
+      if (overridden) {
+        // VUs must be able to keep up with the requested rate, or k6 drops iterations
+        // and the step fails for the wrong reason.
+        scenario.preAllocatedVUs = Math.max(profile.preAllocatedVUs, Math.ceil(rate * 2));
+        scenario.maxVUs = Math.max(profile.maxVUs, Math.ceil(rate * 4));
+      }
     } else {
       // ramping-arrival-rate
       scenario.stages = profile.stages;
