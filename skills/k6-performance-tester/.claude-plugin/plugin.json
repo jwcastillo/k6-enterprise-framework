@@ -1,0 +1,8 @@
+{
+  "name": "k6-performance-tester",
+  "description": "Enterprise k6 load testing expert. Enforces framework patterns, best practices, and coding standards for creating production-grade performance tests.",
+  "version": "1.0.0",
+  "author": {
+    "name": "JW Castillo"
+  }
+}
