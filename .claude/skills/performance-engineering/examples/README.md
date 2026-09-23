@@ -3,7 +3,7 @@
 Concrete examples of artifacts the skill produces in real engagements. Useful for:
 - Showing new users what a "good context document" / "good ticket" / "good engagement brief" looks like
 - Giving Claude a calibration anchor when starting a new engagement
-- Sharing internally at Globant or with clients as "this is the deliverable shape"
+- Sharing internally or with clients as "this is the deliverable shape"
 
 ## Contents
 
@@ -14,7 +14,7 @@ Concrete examples of artifacts the skill produces in real engagements. Useful fo
 | `sample-engagement-acme-corp/sample-tickets.md` | Three vertical-slice tickets generated from findings, in Linear-compatible format |
 | `sample-engagement-acme-corp/sample-exec-digest.md` | A 1-page executive digest produced mid-engagement |
 
-The "Acme Corp" example is fictional but realistic — modeled on the common Globant engagement shape (Java/Spring Boot service in Kubernetes, checkout perf issue, multi-week engagement).
+The "Acme Corp" example is fictional but realistic — modeled on a common consulting engagement shape (Java/Spring Boot service in Kubernetes, checkout perf issue, multi-week engagement).
 
 ## How to use
 

@@ -107,7 +107,7 @@ Cross-reference: when the user reports a new symptom, **check this table first**
 | Date | Title | Sev | Root cause summary | Post-mortem link |
 |------|-------|-----|--------------------|-----| 
 | 2025-11 | Checkout latency spike during BFCM | SEV1 | Connection pool exhaustion under spike | [link] |
-| 2025-09 | Slow rollout of v2.1 to LATAM | SEV2 | Missed canary metric, deploy proceeded | [link] |
+| 2025-09 | Slow rollout of v2.1 to EU region | SEV2 | Missed canary metric, deploy proceeded | [link] |
 | ... | | | | |
 
 ## 9. Available tools and access
@@ -168,7 +168,6 @@ User-facing or internal terminology that the skill should use consistently.
 |------|---------|
 | Quoter | Internal pricing/quotation service |
 | SOAP campaign | Nightly performance test window |
-| Glober | Globant employee |
 | ... | |
 
 ## 11. Stakeholders and reporting cadence

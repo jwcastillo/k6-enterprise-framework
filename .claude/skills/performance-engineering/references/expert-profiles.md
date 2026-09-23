@@ -261,7 +261,7 @@ Triggers: `Istio`, `Envoy`, `Linkerd`, `Consul Connect`, `Kong`, `Traefik`, `ngi
 
 Bundle: `observability` profile (with explicit focus on histogram bucket saturation across mesh metrics vs APM) + `bottleneck-patterns.md` + `resilience-chaos-testing.md`
 
-Honest scope: the gateway/mesh perf surface — mTLS overhead, sidecar latency cost, header rewriting cost, retry/timeout configuration, traffic splitting. **Critical**: histogram bucket saturation between Istio/Envoy metrics, APM, and span-derived metrics is exactly your Globant Istio investigation case.
+Honest scope: the gateway/mesh perf surface — mTLS overhead, sidecar latency cost, header rewriting cost, retry/timeout configuration, traffic splitting. **Critical**: histogram bucket saturation between Istio/Envoy metrics, APM, and span-derived metrics is a classic source of conflicting latency numbers.
 
 Common combos: `api-gateway + microservices` (default), `api-gateway + observability` (mesh metrics setup).
 
@@ -329,7 +329,7 @@ Bundle: `finops-cloud-cost.md` + `runtimes-on-kubernetes.md` (resource sizing se
 
 Honest scope: covers FinOps Foundation 2026 Framework + FOCUS spec, AWS / Azure / GCP cost levers (Savings Plans / RIs / CUDs / Spot / storage tiers / database tiers), universal patterns (tagging, right-sizing workflow, idle resource detection, egress optimization, storage lifecycle), Kubernetes FinOps (OpenCost / Kubecost / Karpenter / KEDA), AI workload cost (token attribution, model tier selection, GPU sizing), tools landscape (cloud-native + open-source + commercial), engagement workflow (Inform → Optimize → Operate). PE engineer's perspective — not a FinOps Foundation textbook.
 
-Common combos: `finops + java-k8s` (most common Globant pattern — JVM apps in cloud K8s with cost optimization scope); `finops + llm-perf` (AI workload cost management); `finops + engagement-mode` (multi-week FinOps engagements); `finops + observability` (cost dashboards + per-workload attribution).
+Common combos: `finops + java-k8s` (most common pattern — JVM apps in cloud K8s with cost optimization scope); `finops + llm-perf` (AI workload cost management); `finops + engagement-mode` (multi-week FinOps engagements); `finops + observability` (cost dashboards + per-workload attribution).
 
 #### `cicd-pipeline`
 
@@ -363,7 +363,7 @@ Bundle: `agent-team-orchestration.md` + `intake-checklists.md` + `context-docume
 
 Honest scope: this is the **orchestration profile** — turns the skill from "answer one question" to "run a multi-week engagement as a cross-functional team simulation." Loads all the engagement-management references. Activates the agent-team mode with PM / SM / Tech Lead / Engineer / SRE / QA roles, GSD cadence, vertical slices, sprint loop.
 
-**Note**: this is an overlay, not a replacement. It combines with the stack profiles. A typical Globant client engagement would activate `engagement-mode + spring-boot + java-k8s + observability` to run as a team on a real client's Java stack.
+**Note**: this is an overlay, not a replacement. It combines with the stack profiles. A typical client engagement would activate `engagement-mode + spring-boot + java-k8s + observability` to run as a team on a real client's Java stack.
 
 ---
 

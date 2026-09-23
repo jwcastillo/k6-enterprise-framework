@@ -78,7 +78,7 @@ When connected, useful for:
 
 ### Datadog / New Relic / Dynatrace MCP
 
-When connected, gives APM data access. **Note**: Dynatrace is commonly used in enterprise environments (Globant client patterns); its MCP coverage may vary. If Dynatrace MCP is unavailable, prompt the user to paste relevant traces / charts.
+When connected, gives APM data access. **Note**: Dynatrace is commonly used in enterprise environments; its MCP coverage may vary. If Dynatrace MCP is unavailable, prompt the user to paste relevant traces / charts.
 
 **Pattern for observability-discrepancy investigations** (your active Istio vs Dynatrace case):
 
