@@ -60,7 +60,7 @@ Primary SLO sentence (engagement target):
 - **GitHub** — repo `acme/checkout-service` accessible; PRs OK; merge needs reviewer approval
 - **Slack** — `#checkout-perf-engagement` channel for sync comms
 - **Stripe Dashboard** — read-only access; useful for debugging payment-related latency
-- **k6 Cloud** — Globant team account; load test runs against staging environment
+- **k6 Cloud** — consultancy team account; load test runs against staging environment
 
 ## Access boundaries
 
@@ -83,7 +83,7 @@ Primary SLO sentence (engagement target):
 - **Primary stakeholders**:
   - **Exec sponsor**: VP Engineering, Acme Corp
   - **Tech Lead**: Sarah Chen (Acme), reports on technical sign-off
-  - **Engineering lead from Globant**: Jose (you)
+  - **Engineering lead (consultancy)**: you
 - **Comm cadence**: weekly digest to exec sponsor (Friday), daily Slack standup, ad-hoc as needed
 - **Out of scope (explicit)**: payment gateway migration, frontend Web Vitals, multi-region expansion. All deferred to subsequent engagements.
 

@@ -32,7 +32,6 @@ Each real client repo ships its own portable skill at `clients/<client>/skill/SK
 | Client | Per-client skill (canonical) | Global pointer |
 |--------|------------------------------|----------------|
 | airline-accelerator | `clients/airline-accelerator/skill/SKILL.md` | `k6-airline-accelerator` (thin pointer → per-client) |
-| latam-airlines | `clients/latam-airlines/skill/SKILL.md` | `k6-latam-airlines` (thin pointer → per-client) |
 
 When working inside a specific client, prefer reading that client's `skill/SKILL.md` directly — it carries the client-specific schemas, headers, service classes, and anti-patterns. This `k6-performance-tester` skill covers the cross-client framework conventions.
 

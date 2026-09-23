@@ -41,4 +41,4 @@ None this week. Continuing per plan.
 
 ---
 
-**Prepared by**: Globant PE team | **Channel**: `#checkout-perf-engagement` | **Next digest**: 2026-06-02
+**Prepared by**: PE team | **Channel**: `#checkout-perf-engagement` | **Next digest**: 2026-06-02

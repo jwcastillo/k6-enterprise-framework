@@ -194,7 +194,7 @@ Major capability expansion: FinOps, CI/CD pipeline optimization, and skill self-
 
 - The skill is now substantial (~10k lines of skill content). Use expert profiles aggressively — loading `finops` + `java-k8s` for a cloud cost engagement is far less noise than loading everything.
 - Self-maintenance is workflow, not magic. To use it: ask Claude to "audit this skill" or "research X and propose updates". The skill provides the structure; Claude does the work; you authorize each change.
-- FinOps and CI/CD profiles compose with existing profiles. A typical Globant cloud-perf engagement might activate `spring-boot + java-k8s + observability + finops + engagement-mode` simultaneously.
+- FinOps and CI/CD profiles compose with existing profiles. A typical cloud-perf engagement might activate `spring-boot + java-k8s + observability + finops + engagement-mode` simultaneously.
 
 ---
 

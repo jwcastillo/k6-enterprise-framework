@@ -31,7 +31,7 @@ Why this study now. What decision depends on it. Prior baselines and what change
 ## 2. Research question
 
 State as a falsifiable claim or a precise question:
-- ✅ "Does enabling HTTP/3 on the edge reduce p99 TTFB by ≥ 15% for mobile clients in LATAM?"
+- ✅ "Does enabling HTTP/3 on the edge reduce p99 TTFB by ≥ 15% for mobile clients in emerging markets?"
 - ❌ "How can we improve performance?"
 
 Define metrics precisely:
@@ -144,7 +144,7 @@ Embedded or linked.
 
 ## White Paper (external / strategic)
 
-Use when: positioning Globant capability for a client, publishing externally, or producing a strategic internal document for executives. Typical length: 6-15 pages. Tone: assertive, well-cited, polished prose (not bullet-heavy).
+Use when: positioning your team's capability for a client, publishing externally, or producing a strategic internal document for executives. Typical length: 6-15 pages. Tone: assertive, well-cited, polished prose (not bullet-heavy).
 
 ```markdown
 # [Compelling, specific title — usually 6-10 words]

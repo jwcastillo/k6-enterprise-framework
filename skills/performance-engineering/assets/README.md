@@ -57,7 +57,7 @@ Templates ship inline as markdown in `references/deliverable-templates.md` and `
 - Maintaining binary templates across versions adds complexity
 
 Future versions will add binary templates when:
-- A specific corporate style emerges from real engagements (e.g., a Globant-branded executive 1-pager)
+- A specific corporate style emerges from real engagements (e.g., a company-branded executive 1-pager)
 - The skill grows scripts that fill .docx programmatically (see `scripts/README.md`)
 - Vendor-specific dashboard JSON proves valuable enough to standardize (e.g., a SOAP-test report dashboard for k6 + Grafana)
 

@@ -15,8 +15,8 @@ Diagnose and remediate the p99 latency regression in Acme Corp's `checkout-servi
 | Exec sponsor | VP Engineering, Acme Corp | Scope, budget, "go" / "no-go" on architectural changes | Weekly digest, ad-hoc escalations |
 | Engineering lead (client) | Sarah Chen, Acme | Technical sign-off on changes, code review approval | Daily standup, async Slack |
 | Platform/SRE lead (client) | Marcus Reyes, Acme | Resource limits, Istio config, observability changes | Weekly sync |
-| PE consultant lead (Globant) | Jose | Engagement plan, technical recommendations | Daily standup |
-| Globant PM | Carolina Pérez | Stakeholder comms, scope changes, deliverable acceptance | Weekly digest |
+| PE consultant lead | You | Engagement plan, technical recommendations | Daily standup |
+| Consultancy PM | Carolina Pérez | Stakeholder comms, scope changes, deliverable acceptance | Weekly digest |
 
 ## Success criteria
 
@@ -30,7 +30,7 @@ Primary SLO sentence:
 
 ## Constraints
 
-- **Budget**: 5 sprints × 80h = 400h Globant; client team 0.4 FTE allocated
+- **Budget**: 5 sprints × 80h = 400h consultancy; client team 0.4 FTE allocated
 - **Timeline**: 2026-05-15 start, 2026-06-19 end (3 weeks active + 2 weeks soak/validation)
 - **Freeze windows**: 2026-06-15 → 2026-06-30 (Black Friday prep blackout) — all production changes paused
 - **Compliance**: PCI DSS — payment-handling code changes require PCI-trained reviewer (Carolina has SLA 24h)
@@ -59,8 +59,8 @@ Primary SLO sentence:
 
 - **Daily standup**: 09:00 EST, 15 min, async-first in Slack `#checkout-perf-engagement` for written, sync if needed
 - **Weekly digest to exec sponsor**: Friday 14:00 EST, 1-page format (use `references/deliverable-templates.md`)
-- **Slack channel**: `#checkout-perf-engagement` (mixed client + Globant)
-- **Escalation path**: Scrum Master → Tech Lead → Globant PM → VP Engineering (Acme)
+- **Slack channel**: `#checkout-perf-engagement` (mixed client + consultancy)
+- **Escalation path**: Scrum Master → Tech Lead → Consultancy PM → VP Engineering (Acme)
 - **Mid-engagement review**: end of sprint 2, 30-min call with exec sponsor, deliverable: progress digest + ask for any scope adjustments
 
 ## Methodology declaration
