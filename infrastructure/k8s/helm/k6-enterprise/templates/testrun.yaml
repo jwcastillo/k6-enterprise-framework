@@ -16,6 +16,11 @@ metadata:
 spec:
   parallelism: {{ .Values.test.parallelism }}
 
+  {{- if .Values.test.arguments }}
+  # k6 CLI args (p. ej. "-o experimental-prometheus-rw" para push a Prometheus).
+  arguments: {{ .Values.test.arguments | quote }}
+  {{- end }}
+
   script:
     configMap:
       name: {{ .Values.test.script.configMap.name | quote }}
@@ -65,12 +70,28 @@ spec:
       {{- toYaml .Values.runner.affinity | nindent 6 }}
     {{- end }}
 
-    {{- if .Values.persistence.enabled }}
+    {{- if or .Values.persistence.enabled .Values.test.dataSecret.name }}
     volumeMounts:
+      {{- if .Values.persistence.enabled }}
       - name: reports
         mountPath: {{ .Values.persistence.mountPath }}
+      {{- end }}
+      {{- if .Values.test.dataSecret.name }}
+      - name: data
+        mountPath: {{ .Values.test.dataSecret.mountPath }}
+        readOnly: true
+      {{- end }}
     volumes:
+      {{- if .Values.persistence.enabled }}
       - name: reports
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-reports
+      {{- end }}
+      {{- if .Values.test.dataSecret.name }}
+      # Data file(s) that carry secrets/PII (e.g. captured session cookies for
+      # replay). k6 reads them via open() at the mountPath (REPLAY_FILE).
+      - name: data
+        secret:
+          secretName: {{ .Values.test.dataSecret.name }}
+      {{- end }}
     {{- end }}

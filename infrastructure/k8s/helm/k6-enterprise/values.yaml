@@ -36,11 +36,24 @@ test:
   # Number of parallel k6 runner pods
   parallelism: 2
 
+  # Extra k6 CLI arguments passed to the TestRun (empty = none).
+  # e.g. "-o experimental-prometheus-rw" to push metrics to Prometheus.
+  arguments: ""
+
   # Script source — ConfigMap containing the compiled JS bundle
   script:
     configMap:
       name: k6-scripts
       file: scenario.js
+
+  # Optional Secret mounted read-only for data files that carry secrets/PII
+  # (e.g. captured session cookies for the replay scenario). Create it first:
+  #   kubectl create secret generic k6-replay-data \
+  #     --from-file=replay-capturado.json=clients/falabella-auto/data/replay-capturado.json
+  # Then point the scenario at it: -e REPLAY_FILE=<mountPath>/replay-capturado.json
+  dataSecret:
+    name: "" # e.g. k6-replay-data; empty disables the mount
+    mountPath: /data
 
 # ── Runner pod configuration ──────────────────────────────────────────────────
 runner:
@@ -61,7 +74,8 @@ runner:
     K6_PROFILE: smoke
     K6_ENV: staging
     K6_CLIENT: my-team
-    K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+    # K6_PROMETHEUS_RW_SERVER_URL lo inyecta el bloque prometheus.remoteWrite
+    # (abajo) cuando está enabled — no ponerlo acá para no duplicar el env.
 
   # T-132: Reference a Kubernetes Secret for ALL sensitive values.
   # NEVER put tokens, passwords, or API keys in the env block above as literal values.

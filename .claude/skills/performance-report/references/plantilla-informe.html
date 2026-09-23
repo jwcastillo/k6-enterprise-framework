@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe de pruebas de carga — Falabella Seguros</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --accent:#c97a4e; --accent-hover:#b56a3f; --accent-subtle:rgba(201,122,78,.08);
+    --bg:#faf9f7; --bg-alt:#f4f1ec; --surface:#fff; --border:#e8e5e0; --border-subtle:#f0ede8;
+    --text:#1a1a1a; --text-2:#6b6b6b; --text-3:#999; --success:#2d8a56; --fail:#c0392b;
+    --font-display:"Space Grotesk",sans-serif; --font-body:"Inter",sans-serif; --font-mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.55;font-size:15px}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 64px}
+  header{display:flex;align-items:center;gap:14px;padding-bottom:20px;border-bottom:2px solid var(--accent)}
+  header .mark{flex:0 0 auto}
+  header .brand{font-family:var(--font-display);font-weight:700;font-size:20px;letter-spacing:-.01em}
+  header .sep{color:var(--text-3);margin:0 4px}
+  header .doc{color:var(--text-2);font-size:14px}
+  h1{font-family:var(--font-display);font-weight:700;font-size:28px;letter-spacing:-.02em;margin:28px 0 6px}
+  .meta{font-family:var(--font-mono);font-size:12.5px;color:var(--text-2);margin-bottom:8px}
+  .badge{display:inline-block;font-family:var(--font-mono);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px}
+  .badge.ok{background:rgba(45,138,86,.12);color:var(--success)}
+  .badge.warn{background:var(--accent-subtle);color:var(--accent)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:18px;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--border-subtle)}
+  p{margin:0 0 12px}
+  .lead{font-size:16px}
+  .muestra{background:var(--accent-subtle);border:1px solid var(--accent);color:var(--accent-hover);font-family:var(--font-mono);font-size:12px;padding:8px 12px;border-radius:8px;margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--text-2)}
+  td.num,th.num{text-align:right;font-family:var(--font-mono);font-size:13px}
+  tr:last-child td{border-bottom:1px solid var(--border)}
+  .ok{color:var(--success);font-weight:600}
+  .fail{color:var(--fail);font-weight:600}
+  ul{margin:0 0 12px;padding-left:20px}
+  li{margin:4px 0}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:14px 0}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .card .k{font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em}
+  .card .v{font-family:var(--font-display);font-weight:700;font-size:22px;margin-top:4px}
+  footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-3);font-size:12px;font-family:var(--font-mono);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  @media print{body{background:#fff}.wrap{max-width:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="mark"><svg width="34" height="34" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect width="100" height="100" rx="20" fill="#1a1a1a"/><path d="M28 28h44v10H56v36H44V38H28V28z" fill="#faf9f7"/><circle cx="72" cy="72" r="6" fill="#c97a4e"/></svg></span>
+    <span class="brand">Timestamp</span>
+    <span class="sep">·</span>
+    <span class="doc">Informe de pruebas de carga</span>
+  </header>
+
+  <h1>Seguro auto — Cyber 2026 · Falabella Seguros</h1>
+  <div class="meta">Campaña: 2026-09-DD 23:30–05:00 · Ambiente: producción (web) / preprod (APIs) · Frente B (replay)</div>
+  <span class="badge ok">VEREDICTO: soporta el pico objetivo</span>
+
+  <div class="muestra">MUESTRA / PLANTILLA — datos del smoke del 2026-09-23; se reemplazan con la corrida real.</div>
+
+  <h2>Resumen ejecutivo</h2>
+  <p class="lead">El flujo de cotización sostiene <strong>NN cotizaciones/s</strong> antes de degradarse; el quiebre aparece en <strong>NNN/s</strong> en la etapa de búsqueda de ofertas. Se confirma un hallazgo previo: la búsqueda ya tarda <strong>13,7 s</strong> con un solo usuario, sobre el timeout de negocio de 10 s.</p>
+  <div class="cards">
+    <div class="card"><div class="k">Capacidad sostenible</div><div class="v">NN/s</div></div>
+    <div class="card"><div class="k">Quiebre</div><div class="v">NNN/s</div></div>
+    <div class="card"><div class="k">Etapa que cae 1°</div><div class="v">Búsqueda</div></div>
+    <div class="card"><div class="k">Error a pico</div><div class="v">N,N%</div></div>
+  </div>
+
+  <h2>Objetivos y respuestas</h2>
+  <ul>
+    <li><strong>¿Cuántas cotizaciones/s antes de degradar?</strong> — NN/s (primer escalón sobre el umbral de degradación).</li>
+    <li><strong>¿Dónde y a qué tasa quiebra?</strong> — Etapa de búsqueda, a NNN/s.</li>
+    <li><strong>¿Qué aseguradora cae primero?</strong> — &lt;aseguradora&gt; (presencia &lt; 95 %).</li>
+    <li><strong>¿Aguanta el pico Cyber?</strong> — Sí/No hasta &lt;tasa&gt;/s.</li>
+  </ul>
+
+  <h2>Resultados por etapa (smoke — muestra)</h2>
+  <table>
+    <thead><tr><th>Etapa</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th><th class="num">Éxito</th></tr></thead>
+    <tbody>
+      <tr><td>W1 visita</td><td class="num">740</td><td class="num">838</td><td class="num">847</td><td class="num ok">100%</td></tr>
+      <tr><td>W2 patente</td><td class="num">190</td><td class="num">192</td><td class="num">192</td><td class="num ok">100%</td></tr>
+      <tr><td>W4 uso del auto</td><td class="num">720</td><td class="num">775</td><td class="num">780</td><td class="num ok">100%</td></tr>
+      <tr><td>W5 cotización</td><td class="num">191</td><td class="num">193</td><td class="num">193</td><td class="num ok">100%</td></tr>
+      <tr><td>W7 datos personales</td><td class="num">558</td><td class="num">558</td><td class="num">558</td><td class="num ok">100%</td></tr>
+      <tr><td>W8 pago</td><td class="num">199</td><td class="num">231</td><td class="num">234</td><td class="num ok">100%</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:13px;color:var(--text-2)">Valores en ms. En la corrida real, una tabla por escenario (baseline / exploratoria / Cyber) con la columna de escalón.</p>
+
+  <h2>Hallazgos</h2>
+  <ul>
+    <li>Búsqueda de ofertas (<span style="font-family:var(--font-mono)">/api/quotation</span>) en <strong>13,7 s</strong> con 1 usuario, sobre el timeout de negocio de 10 s.</li>
+    <li>&lt;otros hallazgos con evidencia y número&gt;.</li>
+  </ul>
+
+  <h2>Límites de la prueba</h2>
+  <ul>
+    <li><strong>Método replay:</strong> se mide la capacidad del path de lectura/cómputo (vehículo → búsqueda). La escritura de la cotización repite el mismo identificador y el backend puede rechazar duplicados, por lo que su capacidad no se reporta como del sistema.</li>
+    <li><strong>Ambiente:</strong> las APIs corren en preprod; no se extrapola a producción sin declararlo.</li>
+    <li><strong>Inyector:</strong> lo que exceda el techo del generador aparece como iteraciones descartadas — límite de la prueba, no del sistema.</li>
+    <li><strong>Medición</strong> desde la nube (no desde un ISP chileno).</li>
+  </ul>
+
+  <footer>
+    <span>Timestamp · timestamp.cl</span>
+    <span>Falabella Seguros · confidencial</span>
+  </footer>
+</div>
+</body>
+</html>
