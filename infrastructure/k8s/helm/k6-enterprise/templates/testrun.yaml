@@ -16,6 +16,11 @@ metadata:
 spec:
   parallelism: {{ .Values.test.parallelism }}
 
+  # k6 CLI args (p. ej. "-o experimental-prometheus-rw" para push a Prometheus).
+  # testid siempre va: los dashboards filtran por él y una corrida sin testid no se puede elegir.
+  {{- $testid := .Values.test.testid | default (printf "%s-%s" .Values.test.name (now | date "0102-1504")) }}
+  arguments: {{ trim (printf "%s --tag testid=%s" .Values.test.arguments $testid) | quote }}
+
   script:
     configMap:
       name: {{ .Values.test.script.configMap.name | quote }}
@@ -65,12 +70,46 @@ spec:
       {{- toYaml .Values.runner.affinity | nindent 6 }}
     {{- end }}
 
-    {{- if .Values.persistence.enabled }}
+    {{- $data := or .Values.test.dataUrl.url .Values.test.dataSecret.name }}
+    {{- if .Values.test.dataUrl.url }}
+    # Data over the Secret size limit: downloaded before k6 starts.
+    initContainers:
+      - name: fetch-data
+        image: curlimages/curl:8.10.1
+        command: ["sh", "-c", 'curl -fsS --retry 3 -o "{{ .Values.test.dataSecret.mountPath }}/{{ .Values.test.dataUrl.file }}" "$DATA_URL"']
+        env:
+          - name: DATA_URL
+            value: {{ .Values.test.dataUrl.url | quote }}
+        volumeMounts:
+          - name: data
+            mountPath: {{ .Values.test.dataSecret.mountPath }}
+    {{- end }}
+
+    {{- if or .Values.persistence.enabled $data }}
     volumeMounts:
+      {{- if .Values.persistence.enabled }}
       - name: reports
         mountPath: {{ .Values.persistence.mountPath }}
+      {{- end }}
+      {{- if $data }}
+      - name: data
+        mountPath: {{ .Values.test.dataSecret.mountPath }}
+        readOnly: true
+      {{- end }}
     volumes:
+      {{- if .Values.persistence.enabled }}
       - name: reports
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-reports
+      {{- end }}
+      {{- if .Values.test.dataUrl.url }}
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.test.dataSecret.name }}
+      # Data file(s) that carry secrets/PII (e.g. captured session cookies for
+      # replay). k6 reads them via open() at the mountPath (REPLAY_FILE).
+      - name: data
+        secret:
+          secretName: {{ .Values.test.dataSecret.name }}
+      {{- end }}
     {{- end }}
