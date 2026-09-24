@@ -55,6 +55,13 @@ test:
     name: "" # e.g. k6-replay-data; empty disables the mount
     mountPath: /data
 
+  # Alternative for data over the 1 MiB Secret limit: an init container downloads
+  # it from a (presigned, short-lived) URL into an emptyDir at dataSecret.mountPath.
+  # Takes precedence over dataSecret.name.
+  dataUrl:
+    url: "" # e.g. presigned S3 URL; empty disables
+    file: replay-capturado.json
+
 # ── Runner pod configuration ──────────────────────────────────────────────────
 runner:
   serviceAccountName: k6-runner
