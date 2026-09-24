@@ -70,13 +70,28 @@ spec:
       {{- toYaml .Values.runner.affinity | nindent 6 }}
     {{- end }}
 
-    {{- if or .Values.persistence.enabled .Values.test.dataSecret.name }}
+    {{- $data := or .Values.test.dataUrl.url .Values.test.dataSecret.name }}
+    {{- if .Values.test.dataUrl.url }}
+    # Data over the Secret size limit: downloaded before k6 starts.
+    initContainers:
+      - name: fetch-data
+        image: curlimages/curl:8.10.1
+        command: ["sh", "-c", 'curl -fsS --retry 3 -o "{{ .Values.test.dataSecret.mountPath }}/{{ .Values.test.dataUrl.file }}" "$DATA_URL"']
+        env:
+          - name: DATA_URL
+            value: {{ .Values.test.dataUrl.url | quote }}
+        volumeMounts:
+          - name: data
+            mountPath: {{ .Values.test.dataSecret.mountPath }}
+    {{- end }}
+
+    {{- if or .Values.persistence.enabled $data }}
     volumeMounts:
       {{- if .Values.persistence.enabled }}
       - name: reports
         mountPath: {{ .Values.persistence.mountPath }}
       {{- end }}
-      {{- if .Values.test.dataSecret.name }}
+      {{- if $data }}
       - name: data
         mountPath: {{ .Values.test.dataSecret.mountPath }}
         readOnly: true
@@ -87,7 +102,10 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-reports
       {{- end }}
-      {{- if .Values.test.dataSecret.name }}
+      {{- if .Values.test.dataUrl.url }}
+      - name: data
+        emptyDir: {}
+      {{- else if .Values.test.dataSecret.name }}
       # Data file(s) that carry secrets/PII (e.g. captured session cookies for
       # replay). k6 reads them via open() at the mountPath (REPLAY_FILE).
       - name: data
