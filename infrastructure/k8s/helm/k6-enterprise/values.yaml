@@ -40,6 +40,9 @@ test:
   # e.g. "-o experimental-prometheus-rw" to push metrics to Prometheus.
   arguments: ""
 
+  # k6 --tag testid=<value> (always added). Empty = "<name>-<MMDD-HHMM>" at render time.
+  testid: ""
+
   # Script source — ConfigMap containing the compiled JS bundle
   script:
     configMap:

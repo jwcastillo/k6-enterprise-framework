@@ -16,10 +16,10 @@ metadata:
 spec:
   parallelism: {{ .Values.test.parallelism }}
 
-  {{- if .Values.test.arguments }}
   # k6 CLI args (p. ej. "-o experimental-prometheus-rw" para push a Prometheus).
-  arguments: {{ .Values.test.arguments | quote }}
-  {{- end }}
+  # testid siempre va: los dashboards filtran por él y una corrida sin testid no se puede elegir.
+  {{- $testid := .Values.test.testid | default (printf "%s-%s" .Values.test.name (now | date "0102-1504")) }}
+  arguments: {{ trim (printf "%s --tag testid=%s" .Values.test.arguments $testid) | quote }}
 
   script:
     configMap:
