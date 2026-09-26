@@ -109,7 +109,7 @@ jobs:
       - name: Install k6
         uses: grafana/setup-k6-action@v1
         with:
-          k6-version: "2.2.0"
+          k6-version: "2.3.0"
 
       - name: Validate workflow inputs
         # T-140: Sanitize inputs from workflow_dispatch before use in shell

@@ -38,7 +38,7 @@ variables:
   PERF_PROFILE: "smoke"
   PERF_SUITE: "nightly"
   PERF_NOTIFY: "none"
-  K6_VERSION: "0.54.0"
+  K6_VERSION: "2.3.0"
   NODE_VERSION: "20"
   REPORTS_DIR: "reports"
 

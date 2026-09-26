@@ -20,7 +20,7 @@ EMBED_DIR="${ROOT_DIR}/framework/cmd/k6-embedded"
 PLATFORM=""
 VERIFY="false"
 OUTPUT_DIR=""
-K6_VERSION="v1.6.1"
+K6_VERSION="v1.8.1"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'

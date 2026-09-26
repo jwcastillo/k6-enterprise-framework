@@ -13,9 +13,9 @@
 #   - docker must be in PATH
 #
 # EXAMPLES:
-#   ./bin/update-k6-digest.sh --tag=0.54.0
-#   ./bin/update-k6-digest.sh --tag=0.55.0 --dry-run
-#   ./bin/update-k6-digest.sh  # uses K6_VERSION env or defaults to 0.54.0
+#   ./bin/update-k6-digest.sh --tag=2.3.0
+#   ./bin/update-k6-digest.sh --tag=2.4.0 --dry-run
+#   ./bin/update-k6-digest.sh  # uses K6_VERSION env or defaults to 2.3.0
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DOCKERFILE_PATH="${ROOT_DIR}/infrastructure/k8s/Dockerfile"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-TAG="${K6_VERSION:-0.54.0}"
+TAG="${K6_VERSION:-2.3.0}"
 DRY_RUN="false"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ USAGE:
   ./bin/update-k6-digest.sh [OPTIONS]
 
 OPTIONS:
-  --tag=<version>   k6 image tag to resolve (default: \${K6_VERSION:-0.54.0})
+  --tag=<version>   k6 image tag to resolve (default: \${K6_VERSION:-2.3.0})
   --tag <version>   alternate form (space-separated)
   --dry-run         Show the proposed digest without modifying the Dockerfile
   --help            Show this help
@@ -57,9 +57,9 @@ PREREQUISITES:
   - docker must be in PATH (exit 1 if missing)
 
 EXAMPLES:
-  ./bin/update-k6-digest.sh --tag=0.54.0
-  ./bin/update-k6-digest.sh --tag=0.55.0 --dry-run
-  K6_VERSION=0.54.0 ./bin/update-k6-digest.sh
+  ./bin/update-k6-digest.sh --tag=2.3.0
+  ./bin/update-k6-digest.sh --tag=2.4.0 --dry-run
+  K6_VERSION=2.3.0 ./bin/update-k6-digest.sh
 
 SED PATTERN:
   Targets: ARG K6_VERSION_DIGEST=sha256:<exactly-64-hex-chars>
