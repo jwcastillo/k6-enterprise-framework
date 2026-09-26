@@ -112,7 +112,7 @@ management.metrics.distribution.percentiles-histogram.http.server.requests=true
 management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99,0.999
 ```
 
-Exposes Prometheus-scrapeable RED metrics with native histogram percentiles. Required for the SLO measurement queries in `promql-for-perf.md` to work end-to-end.
+Exposes Prometheus-scrapeable RED metrics with native histogram percentiles. `heapdump`, `threaddump` and `httptrace` leak memory contents and request data: serve Actuator on a separate management port that is not reachable publicly, or drop those three outside a controlled perf environment. Required for the SLO measurement queries in `promql-for-perf.md` to work end-to-end.
 
 #### Common Spring Boot perf pitfalls
 

@@ -469,7 +469,7 @@ When generating a k6 artifact from scratch, follow this disciplined flow:
 
 1. **Plan** — collect target endpoints, SLA, protocol, scenario type, environment. Don't generate without these.
 2. **Build** — produce the runnable script following the 5-block pattern, plus a `config/<env>.json` and run command.
-3. **Validate** — review against the common-mistakes checklist (sleep, check vs threshold, SharedArray, hardcoded values, percentiles not means). Run `k6 inspect` for syntax. If possible, run a 30s smoke and report results.
+3. **Validate** — review against the common-mistakes checklist (sleep, check vs threshold, SharedArray, hardcoded values, percentiles not means). Run `k6 inspect` for syntax. If the user confirms a non-production target, run a 30s smoke and report results.
 
 Never skip Plan when starting fresh. Never skip Validate before handing off to the user.
 

@@ -316,7 +316,8 @@ Concrete savings (measured, RTK project):
 brew install rtk-ai/tap/rtk        # macOS / Linux
 cargo install rtk                  # All platforms
 
-# Hook-first install (auto-rewrite in Claude Code)
+# Hook-first install (auto-rewrite in Claude Code). Installs a global hook that
+# rewrites every Bash call and filters its output: a user decision, never run it for them.
 rtk init -g
 
 # Manual use

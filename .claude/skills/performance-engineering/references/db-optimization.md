@@ -103,7 +103,7 @@ Watch for `type: ALL` (full scan), `Extra: Using filesort`, `rows` columns being
    ```sql
    CREATE INDEX idx_pending_orders ON orders (created_at) WHERE status = 'pending';
    ```
-5. **Don't over-index** — every index is paid on every INSERT/UPDATE/DELETE. Drop unused ones.
+5. **Don't over-index** — every index is paid on every INSERT/UPDATE/DELETE. Drop unused ones, but never primary-key or unique indexes (they enforce integrity even with zero scans), and check replicas before trusting a zero scan count.
 
 ### Find unused indexes
 

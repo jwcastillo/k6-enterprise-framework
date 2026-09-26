@@ -555,7 +555,7 @@ node --prof app.js
 # After exit: node --prof-process isolate-*.log > processed.txt
 
 # Profile inspector (Chrome DevTools attach)
-node --inspect=0.0.0.0:9229 app.js
+node --inspect=127.0.0.1:9229 app.js   # never 0.0.0.0: the inspector is unauthenticated remote code execution
 ```
 
 ### Node.js profiling stack

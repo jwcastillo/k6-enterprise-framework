@@ -445,6 +445,8 @@ export const options: Options = scenarioOptions("funnel-name", {
 
 ### Available Profiles (via K6_PROFILE)
 
+Only `smoke` and `quick` are safe by default. The heavier profiles degrade the target by design: run them only against an environment the user has confirmed, never production without their explicit approval (`bin/target-guard.js` refuses it unless `K6_ALLOW_PROD_LOAD=true`).
+
 | Profile | VUs | Duration | Purpose |
 |---------|-----|----------|---------|
 | smoke | 1-2 | 1 min | Verify operational |
