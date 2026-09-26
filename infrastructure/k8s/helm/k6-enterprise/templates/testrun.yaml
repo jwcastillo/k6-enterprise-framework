@@ -75,7 +75,7 @@ spec:
     # Data over the Secret size limit: downloaded before k6 starts.
     initContainers:
       - name: fetch-data
-        image: curlimages/curl:8.10.1
+        image: curlimages/curl:8.22.0
         command: ["sh", "-c", 'curl -fsS --retry 3 -o "{{ .Values.test.dataSecret.mountPath }}/{{ .Values.test.dataUrl.file }}" "$DATA_URL"']
         env:
           - name: DATA_URL

@@ -32,7 +32,7 @@ variables:
   GIT_DEPTH: "1"
 
 .k6-base:
-  image: node:20-bullseye
+  image: node:24-bookworm
   before_script:
     # Install k6
     - apt-get update -qq && apt-get install -y -qq gnupg2 curl
