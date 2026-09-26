@@ -14,11 +14,24 @@
  * ChromaDB unavailability now emits explicit warn (default) or throws (K6_AI_REQUIRE_RAG=true).
  */
 
-import { ChromaClient, Collection, IncludeEnum } from "chromadb";
+import type { ChromaClient, Collection, IncludeEnum } from "chromadb";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import type { RAGContext, RAGDocument } from "../../types/ai.d";
+
+type ChromaModule = typeof import("chromadb");
+
+/**
+ * chromadb is an optional peer dependency. Load it lazily so importing any agent
+ * works without it installed; a missing package goes through the same degraded /
+ * K6_AI_REQUIRE_RAG=true path as an unreachable server.
+ */
+let chromaModule: ChromaModule | null = null;
+function loadChroma(): ChromaModule {
+  chromaModule ??= require("chromadb") as ChromaModule;
+  return chromaModule;
+}
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -97,7 +110,7 @@ export class KnowledgeBaseManager {
     this.frameworkRoot = options?.frameworkRoot ?? path.resolve(__dirname, "../../../..");
 
     try {
-      this.chroma = new ChromaClient({ path: `http://${host}:${port}` });
+      this.chroma = new (loadChroma().ChromaClient)({ path: `http://${host}:${port}` });
     } catch (err) {
       this.chroma = null;
       this.handleChromaUnavailable(host, port, err);
@@ -268,7 +281,11 @@ export class KnowledgeBaseManager {
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
       nResults: Math.min(topK, totalDocs || 1),
-      include: [IncludeEnum.Documents, IncludeEnum.Metadatas, IncludeEnum.Distances],
+      include: [
+        loadChroma().IncludeEnum.Documents,
+        loadChroma().IncludeEnum.Metadatas,
+        loadChroma().IncludeEnum.Distances,
+      ],
       ...(whereFilter ? { where: whereFilter } : {}),
     });
 
@@ -395,7 +412,7 @@ export class KnowledgeBaseManager {
     try {
       const result = await collection.get({
         ids: [id],
-        include: [IncludeEnum.Metadatas],
+        include: [loadChroma().IncludeEnum.Metadatas],
       });
       const meta = result.metadatas?.[0] as Record<string, string> | undefined;
       return meta?.contentHash ?? null;

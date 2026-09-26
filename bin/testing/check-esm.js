@@ -44,6 +44,8 @@ const ALLOWLIST = new Set([
   "src/observability/overhead-detector.ts",
   "src/patterns/mock-server.ts",
   "src/patterns/chaos-injection.ts",
+  // Optional peer dependency (chromadb) loaded lazily with a guarded require().
+  "src/ai/knowledge-base/knowledge-base.ts",
 ]);
 
 // ── CJS patterns to detect ────────────────────────────────────────────────────
