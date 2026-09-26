@@ -40,6 +40,16 @@
       },
       "description": "Hostnames this client may fire load at. When set, bin/target-guard.js refuses any baseUrl whose host is not listed."
     },
+    "maxVUs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Load ceiling (VUs) for AI-generated scenarios. bin/validate-generated.js warns above it, fails with --strict."
+    },
+    "maxRate": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Load ceiling (iterations/s) for AI-generated scenarios. bin/validate-generated.js warns above it, fails with --strict."
+    },
     "endpoints": {
       "type": "object",
       "additionalProperties": {

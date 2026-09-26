@@ -1,0 +1,18 @@
+{
+  "id": "plan-1",
+  "name": "Health check load",
+  "baseUrl": "https://api.shop.test",
+  "endpoints": [{ "url": "/health", "method": "GET", "expectedStatus": 200 }],
+  "testTypes": ["load"],
+  "trafficModel": { "executor": "ramping-vus", "config": { "stages": [] }, "estimatedDurationSeconds": 300 },
+  "thresholds": { "http_req_duration": ["p(95)<500"] },
+  "dataRequirements": {},
+  "authConfig": { "type": "bearer", "envVar": "API_TOKEN" },
+  "source": "natural-language",
+  "metadata": {
+    "agentVersion": "1.0.0",
+    "generatedAt": "2026-01-01T00:00:00Z",
+    "tokensUsed": { "inputTokens": 10, "outputTokens": 10, "totalTokens": 20, "estimatedCostUsd": 0.01 },
+    "confidence": 0.9
+  }
+}

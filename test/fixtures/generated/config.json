@@ -1,0 +1,6 @@
+{
+  "client": "fixture",
+  "allowedHosts": ["api.shop.test"],
+  "maxVUs": 100,
+  "maxRate": 200
+}

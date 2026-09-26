@@ -25,6 +25,7 @@ const ROOT_DIR = path.resolve(__dirname, "../..");
 // ── Allowlist: files that intentionally use require() for Node.js dual-context
 const ALLOWLIST = new Set([
   "src/core/client-resolver.ts",
+  "src/core/config-validator.ts", // Node-only (header says so); loaded by bin/validate-config.js
   "src/core/audit-logger.ts",
   "src/core/rbac.ts",
   "src/core/rbac-enforcer.ts",
