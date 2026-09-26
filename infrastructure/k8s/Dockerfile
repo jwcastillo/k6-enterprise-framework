@@ -5,7 +5,7 @@
 #
 # Build args:
 #   CLIENT          — client name (matches clients/<CLIENT>/) [required]
-#   K6_VERSION      — k6 base image version tag (human-readable) [default: 0.54.0]
+#   K6_VERSION      — k6 base image version tag (human-readable) [default: 2.3.0]
 #   K6_VERSION_DIGEST — SHA256 digest of the k6 base image [see ARG below]
 #   NODE_DIGEST     — SHA256 digest of the node:22-alpine builder image [see ARG below]
 #
@@ -31,15 +31,15 @@
 #     -t registry.example.com/k6-my-team:latest \
 #     --push .
 
-ARG K6_VERSION=0.54.0
+ARG K6_VERSION=2.3.0
 # SEC-08: Default digest — refresh via bin/update-k6-digest.sh; this placeholder is
 # replaced in Task 2 of Plan 01-06 with the real digest of grafana/k6:${K6_VERSION}.
-ARG K6_VERSION_DIGEST=sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755
+ARG K6_VERSION_DIGEST=sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
 
 # CR-04: Builder stage digest — pin node:22-alpine to a specific SHA-256 to prevent
 # mutable-tag supply-chain substitution. Refresh with:
 #   docker pull node:22-alpine && docker image inspect node:22-alpine --format='{{index .RepoDigests 0}}'
-ARG NODE_DIGEST=sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+ARG NODE_DIGEST=sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 
 # ── Build stage: verify dist exists ───────────────────────────────────────────
 FROM node:22-alpine@${NODE_DIGEST} AS builder

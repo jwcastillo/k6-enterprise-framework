@@ -299,7 +299,7 @@ services:
   # Only starts when: docker compose --profile run up k6
   # T-146: Only port 6565 (k6 REST API) exposed to host from this service.
   k6:
-    image: grafana/k6:${K6_VERSION:-2.2.0}
+    image: grafana/k6:${K6_VERSION:-2.3.0}
     container_name: k6-runner
     profiles:
       - run
