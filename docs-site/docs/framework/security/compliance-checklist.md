@@ -751,7 +751,7 @@ The framework implements **14 security controls** covering access control, audit
 - [ ] **SEC-001** RBAC: 3 roles (developer, lead, admin) with permission matrix
   - Type: CONFIG
   - Verify: Check `clients/{name}/config/rbac.json` for role definitions
-  - Expected: Three roles with differentiated permissions (developer: smoke/quick/load only; lead: all profiles; admin: full management)
+  - Expected: Three roles with differentiated permissions (developer: smoke/quick/load and throughput-low/-medium only; lead: all profiles; admin: full management)
 
 - [ ] **SEC-002** Immutable audit log: all actions logged with timestamp, user, action, result
   - Type: MANUAL

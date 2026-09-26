@@ -52,9 +52,9 @@ declare -a PATTERNS=(
   # Slack token
   'xox[baprs]-[0-9A-Za-z]{10,}'
   # Hardcoded password assignment (literal value, not variable reference)
-  "['\"]password['\"]\s*[:=]\s*['\"][^'\"${}]{8,}['\"]"
+  "['\"]password['\"]\s*[:=]\s*['\"][^'\"\${}]{8,}['\"]"
   # Hardcoded api_key literal
-  "['\"]api_key['\"]\s*[:=]\s*['\"][^'\"${}]{8,}['\"]"
+  "['\"]api_key['\"]\s*[:=]\s*['\"][^'\"\${}]{8,}['\"]"
 )
 
 # ── Allowlist markers ──────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ for pattern in "${PATTERNS[@]}"; do
       --exclude-dir=node_modules \
       --exclude-dir=dist \
       --exclude-dir=.git \
-      "${pattern}" \
+      -e "${pattern}" \
       "${SCAN_DIRS[@]/#/${ROOT_DIR}/}" 2>/dev/null || true
   )
 done

@@ -11,6 +11,7 @@
  */
 
 import type { TokenUsage } from "../../types/ai.d";
+import type { LLMProvider, ChatMessage, ChatOptions, ChatResponse } from "./llm-provider.js";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -342,4 +343,36 @@ export class BudgetManager {
   getRemainingTokenBudget(): number {
     return Math.max(0, this.agentBudget.maxTotalTokensSession - this.sessionTokensUsed);
   }
+}
+
+// ---------------------------------------------------------------------------
+// budgetedChat — the single path for agent LLM calls
+// ---------------------------------------------------------------------------
+
+/**
+ * One LLM call under the budget: check budget/circuit breaker → call → record
+ * usage on success or a failure on error (so the circuit breaker can open).
+ * Output tokens are capped at what is left of the agent's session budget.
+ */
+export async function budgetedChat(
+  provider: LLMProvider,
+  budget: BudgetManager,
+  agentId: string,
+  messages: ChatMessage[],
+  options: ChatOptions = {}
+): Promise<{ response: ChatResponse; usage: TokenUsage }> {
+  budget.checkBudget(agentId);
+  const remaining = budget.getRemainingTokenBudget();
+  const maxTokens = Math.max(256, Math.min(options.maxTokens ?? 4096, remaining));
+  let response: ChatResponse;
+  try {
+    response = await provider.chat(messages, { ...options, maxTokens });
+  } catch (err) {
+    budget.recordFailure(agentId);
+    throw err;
+  }
+  const { usd } = provider.estimateCost(response.usage, options.model);
+  const usage: TokenUsage = { ...response.usage, estimatedCostUsd: usd };
+  budget.recordUsage(agentId, usage);
+  return { response, usage };
 }

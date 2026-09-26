@@ -1,15 +1,24 @@
 {
   "name": "soak",
-  "description": "Soak testing — sustained load over extended period to detect memory leaks and drift",
-  "stages": [
-    { "duration": "5m",  "target": 20  },
-    { "duration": "4h",  "target": 20  },
-    { "duration": "5m",  "target": 0   }
-  ],
+  "description": "Soak testing (50 req/s for 4h) — arrival-rate open model, leak detection",
+  "executor": "constant-arrival-rate",
+  "rate": 50,
+  "timeUnit": "1s",
+  "duration": "4h",
+  "preAllocatedVUs": 30,
+  "maxVUs": 200,
   "thresholds": {
-    "http_req_duration": ["p(95)<1500", "p(99)<3000"],
-    "http_req_failed": ["rate<0.05"],
-    "checks": ["rate>=0.95"]
+    "http_req_duration": [
+      "p(95)<1500",
+      "p(99)<3000",
+      "p(99.9)<6000"
+    ],
+    "http_req_failed": [
+      "rate<0.05"
+    ],
+    "checks": [
+      "rate>=0.95"
+    ]
   },
   "maxDuration": "4h30m"
 }

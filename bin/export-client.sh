@@ -599,7 +599,9 @@ if [[ "${WITH_REPORTS}" == "true" ]]; then
   log_debug "Copying report generators..."
   cp "${ROOT_DIR}/bin/generate-report.js" "${OUTPUT_DIR}/framework/bin/generate-report.js" 2>/dev/null || true
   cp "${ROOT_DIR}/bin/generate-artifacts.js" "${OUTPUT_DIR}/framework/bin/generate-artifacts.js" 2>/dev/null || true
-  CAPABILITY_FILES=$((CAPABILITY_FILES + 2))
+  # Both generators require ./_help for --help output.
+  cp "${ROOT_DIR}/bin/_help.js" "${OUTPUT_DIR}/framework/bin/_help.js" 2>/dev/null || true
+  CAPABILITY_FILES=$((CAPABILITY_FILES + 3))
 fi
 
 if [[ "${WITH_OBSERVABILITY}" == "true" ]]; then
@@ -756,6 +758,7 @@ cat > "${OUTPUT_DIR}/package.json" << PKGJSON
     "glob": "^13.0.5",
     "js-yaml": "^4.1.1",
     "ts-loader": "^9.5.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "webpack": "^5.105.2",
     "webpack-cli": "^6.0.1"

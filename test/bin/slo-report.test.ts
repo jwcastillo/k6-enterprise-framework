@@ -291,6 +291,51 @@ describe("bin/slo-report.js (COV-04)", () => {
     }
   });
 
+  it("reads run-test.sh summaries (reports/<client>/<scenario>/summary-<ISO>.json) for the month", () => {
+    const SCRATCH = "_test-slo-runtest-layout";
+    const scratchClient = path.join(ROOT, "clients", SCRATCH);
+    const scratchReports = path.join(ROOT, "reports", SCRATCH);
+    try {
+      fs.mkdirSync(path.join(scratchClient, "config"), { recursive: true });
+      fs.writeFileSync(
+        path.join(scratchClient, "config", "slos.json"),
+        JSON.stringify({
+          services: [
+            {
+              serviceName: "api_search",
+              metrics: [{ name: "http_req_duration_p95", target: 500, unit: "ms" }],
+            },
+          ],
+        })
+      );
+      const dir = path.join(scratchReports, "api_search");
+      fs.mkdirSync(dir, { recursive: true });
+      // --summary-export shape (flat), as written by run-test.sh
+      const write = (name: string, p95: number) =>
+        fs.writeFileSync(
+          path.join(dir, name),
+          JSON.stringify({ metrics: { http_req_duration: { "p(95)": p95 } } })
+        );
+      write("summary-20260515-100000.json", 300);
+      write("summary-20260516-100000.json", 800);
+      write("summary-20260601-100000.json", 900); // other month: ignored
+
+      const { code } = run(["--client", SCRATCH, "--month", "2026-05", "--format", "json"]);
+      expect(code).toBe(0);
+
+      const reportPath = path.join(scratchReports, "slo-compliance", "slo-2026-05.json");
+      const report = JSON.parse(fs.readFileSync(reportPath, "utf-8"));
+      const p95 = report.services[0].metrics.find(
+        (m: { metric: string }) => m.metric === "http_req_duration_p95"
+      );
+      expect(p95.passingExecutions).toBe(1);
+      expect(p95.violations.length).toBe(1);
+    } finally {
+      rmIfExists(scratchClient);
+      rmIfExists(scratchReports);
+    }
+  });
+
   it("CR-02: missing http_req_duration is treated as no-data (skipped, no false-pass/false-fail)", () => {
     const SCRATCH = "_test-slo-cr02-nodata";
     const scratchClient = path.join(ROOT, "clients", SCRATCH);
