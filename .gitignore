@@ -23,6 +23,9 @@ clients/*/
 # Reports (generated artifacts)
 reports/
 
+# Third-party skills installed on demand from skills-lock.json (never vendored)
+.claude/skills/archify/
+
 # Test coverage
 coverage/
 

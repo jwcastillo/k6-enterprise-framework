@@ -21,7 +21,7 @@ import { spawn } from "child_process";
 
 import type { GeneratedScript, GeneratedFile, ValidationResult } from "../../types/ai.d";
 import { BuilderAgent } from "../agents/builder-agent.js";
-import { BudgetManager } from "../core/budget-manager.js";
+import { BudgetManager, budgetedChat } from "../core/budget-manager.js";
 import type { LLMProvider } from "../core/llm-provider.js";
 import { AnthropicProvider } from "../core/providers/anthropic-provider.js";
 import { computeUnifiedDiff } from "./healing-diff.js";
@@ -415,11 +415,15 @@ ${this.buildRepairInstructions(error)}
 Genera el script corregido. Responde SOLO con el codigo TypeScript, sin texto adicional.
 NUNCA hardcodees credenciales. Usa __ENV.VARIABLE_NAME para todos los secretos.`;
 
-    const response = await this.provider.chat([{ role: "user", content: prompt }], {
-      model: "claude-haiku-4-5-20251001",
-      maxTokens: 4096,
-      temperature: 0.05,
-    });
+    // Goes through the budget/circuit breaker like every agent call; the model is the
+    // provider's configured default (no hardcoded model id).
+    const { response } = await budgetedChat(
+      this.provider,
+      this.budget,
+      "builder",
+      [{ role: "user", content: prompt }],
+      { maxTokens: 4096, temperature: 0.05 }
+    );
 
     // Extract code from markdown block if wrapped
     const match = response.text.match(/```(?:typescript|ts|javascript|js)?\n?([\s\S]*?)\n?```/);

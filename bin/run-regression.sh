@@ -72,6 +72,18 @@ for arg in "$@"; do
   esac
 done
 
+# ── Not implemented guard ─────────────────────────────────────────────────────
+# The runner this script invokes (src/core/regression-runner.ts) does not exist,
+# and the k6 flags below (--client, --env, --regression-suite, a suite file as
+# --config) are not k6 flags. Fail fast with a clear message instead of a
+# confusing k6 error. Use bin/run-test.sh --gate-baseline for regression gating.
+REGRESSION_RUNNER="${FRAMEWORK_DIR}/src/core/regression-runner.ts"
+if [[ ! -f "$REGRESSION_RUNNER" ]]; then
+  echo -e "${RED}[ERROR]${NC} run-regression.sh is not implemented: ${REGRESSION_RUNNER} does not exist." >&2
+  echo "        Use bin/run-test.sh (e.g. --gate-baseline) to detect regressions." >&2
+  exit 2
+fi
+
 # ── Validate required args ────────────────────────────────────────────────────
 if [[ -z "$SUITE" ]]; then
   echo -e "${RED}[ERROR]${NC} --suite is required"

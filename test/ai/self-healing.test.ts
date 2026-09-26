@@ -64,6 +64,7 @@ vi.mock("fs", async () => {
 });
 
 import { SelfHealingEngine } from "../../src/ai/adaptive/self-healing";
+import { BudgetManager } from "../../src/ai/core/budget-manager";
 import type { GeneratedScript } from "../../src/types/ai.d";
 
 describe("SelfHealingEngine", () => {
@@ -251,6 +252,18 @@ describe("SelfHealingEngine", () => {
       expect(result.auditTrail.some((a) => a.result === "success")).toBe(true);
     });
 
+    it("routes the heal call through the budget and uses the provider's default model", async () => {
+      const budgetManager = new BudgetManager({ agentId: "builder" });
+      const budgeted = new SelfHealingEngine({ apiKey: "test-key", budgetManager });
+      const script = makeScript(
+        'import http from "k6/http";\nexport default function() { http.get("broken"); }'
+      );
+      await budgeted.heal(script, "status 400 Bad Request error");
+
+      expect(mockAnthropicCreate.mock.calls[0][0].model).toBe("claude-sonnet-4-6");
+      expect(budgetManager.getSessionTokensUsed()).toBe(700);
+    });
+
     it("should include audit trail entries", async () => {
       const script = makeScript(
         'import http from "k6/http";\nexport default function() { http.get("test"); }'
@@ -287,7 +300,7 @@ describe("SelfHealingEngine", () => {
             type: "text",
             text: `import http from "k6/http";
 export default function() {
-  const password = 'supersecretpassword123';
+  const password = 'supersecretpassword123'; // secret-allow (fixture)
   http.get("http://example.com");
 }`,
           },

@@ -44,6 +44,8 @@ const ALLOWLIST = new Set([
   "src/observability/overhead-detector.ts",
   "src/patterns/mock-server.ts",
   "src/patterns/chaos-injection.ts",
+  // Optional peer dependency (chromadb) loaded lazily with a guarded require().
+  "src/ai/knowledge-base/knowledge-base.ts",
 ]);
 
 // ── CJS patterns to detect ────────────────────────────────────────────────────
@@ -84,7 +86,10 @@ for (const file of filesToCheck) {
   const lines = content.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    // Ignore comment lines and string literals: code that *checks for* "require("
+    // (validators, docs) is not itself CommonJS.
+    if (/^\s*(\/\/|\*|\/\*)/.test(lines[i])) continue;
+    const line = lines[i].replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""');
     for (const { re, label } of CJS_PATTERNS) {
       if (re.test(line)) {
         console.error(`${rel}:${i + 1}: CJS syntax detected (${label})`);

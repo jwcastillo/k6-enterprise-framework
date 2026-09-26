@@ -3,8 +3,9 @@
  * src/ai/core/budget-manager.ts
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { BudgetManager } from "../../src/ai/core/budget-manager";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { BudgetManager, budgetedChat } from "../../src/ai/core/budget-manager";
+import type { LLMProvider } from "../../src/ai/core/llm-provider";
 import type { TokenUsage } from "../../src/types/ai.d";
 
 describe("BudgetManager", () => {
@@ -480,5 +481,51 @@ describe("BudgetManager", () => {
 
       expect(() => bm.checkBudget()).toThrow("Rate limit de tokens");
     });
+  });
+});
+
+describe("budgetedChat", () => {
+  beforeEach(() => BudgetManager.resetPipelineCounters());
+
+  function provider(chat: LLMProvider["chat"]): LLMProvider {
+    return {
+      name: "anthropic",
+      chat: vi.fn(chat),
+      estimateCost: vi.fn(() => ({ usd: 0.01, model: "m" })),
+    } as unknown as LLMProvider;
+  }
+
+  const ok = async () => ({
+    text: "ok",
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    stopReason: "end_turn" as const,
+    model: "m",
+  });
+
+  it("records usage with the estimated cost on success", async () => {
+    const bm = new BudgetManager({ agentId: "planner" });
+    const { usage } = await budgetedChat(provider(ok), bm, "planner", [{ role: "user", content: "hi" }]);
+    expect(usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15, estimatedCostUsd: 0.01 });
+    expect(bm.getSessionTokensUsed()).toBe(15);
+  });
+
+  it("records failures so the circuit breaker opens and blocks further calls", async () => {
+    const bm = new BudgetManager({ agentId: "planner", pipelineConfig: { circuitBreakerThreshold: 2 } });
+    const p = provider(async () => {
+      throw new Error("boom");
+    });
+    const call = () => budgetedChat(p, bm, "planner", [{ role: "user", content: "hi" }]);
+    await expect(call()).rejects.toThrow("boom");
+    await expect(call()).rejects.toThrow("boom");
+    expect(bm.getStatus().circuitOpen).toBe(true);
+    await expect(call()).rejects.toThrow("Circuit breaker");
+    expect(p.chat).toHaveBeenCalledTimes(2);
+  });
+
+  it("caps maxTokens at the remaining session budget", async () => {
+    const bm = new BudgetManager({ agentId: "planner", agentConfig: { maxTotalTokensSession: 1000 } });
+    const p = provider(ok);
+    await budgetedChat(p, bm, "planner", [{ role: "user", content: "hi" }], { maxTokens: 4096 });
+    expect(vi.mocked(p.chat).mock.calls[0][1]?.maxTokens).toBe(1000);
   });
 });

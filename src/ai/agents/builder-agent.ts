@@ -24,8 +24,8 @@ import type {
   TokenUsage,
 } from "../../types/ai.d";
 import { KnowledgeBaseManager } from "../knowledge-base/knowledge-base.js";
-import { BudgetManager } from "../core/budget-manager.js";
-import { DEFAULT_AGENT_CONFIGS } from "../../types/ai.d";
+import { BudgetManager, budgetedChat } from "../core/budget-manager.js";
+import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 
 // ---------------------------------------------------------------------------
 // Constantes del Builder
@@ -114,9 +114,6 @@ export class BuilderAgent implements Agent<TestPlan, GeneratedScript> {
     let totalTokensUsed = { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
 
     for (let cycle = 0; cycle <= MAX_SELF_HEALING_CYCLES; cycle++) {
-      // Verificar budget antes de cada ciclo
-      this.budget.checkBudget("builder");
-
       const errorFeedback = cycle > 0 ? lastValidation.errors : undefined;
       const { code, tokensUsed } = await this.generateCode(input, ragContext, errorFeedback);
 
@@ -125,8 +122,6 @@ export class BuilderAgent implements Agent<TestPlan, GeneratedScript> {
       totalTokensUsed.outputTokens += tokensUsed.outputTokens;
       totalTokensUsed.totalTokens += tokensUsed.totalTokens;
       totalTokensUsed.estimatedCostUsd += tokensUsed.estimatedCostUsd;
-
-      this.budget.recordUsage("builder", tokensUsed);
 
       // Validar el codigo generado
       lastValidation = this.validateGeneratedCode(code);
@@ -219,23 +214,22 @@ export class BuilderAgent implements Agent<TestPlan, GeneratedScript> {
     const systemPrompt = this.buildSystemPrompt();
     const userPrompt = this.buildUserPrompt(input, ragContext, errorFeedback);
 
-    const response = await this.provider.chat([{ role: "user", content: userPrompt }], {
-      model: this.config.model,
-      maxTokens: this.config.maxOutputTokens,
-      temperature: this.config.temperature,
-      system: systemPrompt,
-    });
+    // budgetedChat checks the budget and records usage/failures (circuit breaker).
+    const { response, usage: tokensUsed } = await budgetedChat(
+      this.provider,
+      this.budget,
+      "builder",
+      [{ role: "user", content: userPrompt }],
+      {
+        model: this.config.model,
+        maxTokens: this.config.maxOutputTokens,
+        temperature: this.config.temperature,
+        system: systemPrompt,
+      }
+    );
 
     // Extract code from markdown block if wrapped
     const code = this.extractCode(response.text);
-
-    const { usd } = this.provider.estimateCost(response.usage, this.config.model);
-    const tokensUsed = {
-      inputTokens: response.usage.inputTokens,
-      outputTokens: response.usage.outputTokens,
-      totalTokens: response.usage.totalTokens,
-      estimatedCostUsd: usd,
-    };
 
     return { code, tokensUsed };
   }

@@ -100,7 +100,7 @@ ${BOLD}── Capabilities ─────────────────�
   --with-reports       Include bin/report.sh and HTML report generator
   --with-observability Include infrastructure/ (Grafana + Prometheus + dashboards)
   --with-binary        Include bin/build-binary.sh and Go embed modules
-  --with-claude        Include .claude/ configuration (CLAUDE.md + settings)
+  --with-claude        Include .claude/ configuration (CLAUDE.md, settings, agent team + skills)
   --with-mcp           Include standalone MCP server
   --with-discovery     Include bin/discover-flow.js (AI flow discovery → HAR → k6 plan)
   --full               Enable all capabilities above
@@ -602,7 +602,9 @@ if [[ "${WITH_REPORTS}" == "true" ]]; then
   log_debug "Copying report generators..."
   cp "${ROOT_DIR}/bin/generate-report.js" "${OUTPUT_DIR}/framework/bin/generate-report.js" 2>/dev/null || true
   cp "${ROOT_DIR}/bin/generate-artifacts.js" "${OUTPUT_DIR}/framework/bin/generate-artifacts.js" 2>/dev/null || true
-  CAPABILITY_FILES=$((CAPABILITY_FILES + 2))
+  # Both generators require ./_help for --help output.
+  cp "${ROOT_DIR}/bin/_help.js" "${OUTPUT_DIR}/framework/bin/_help.js" 2>/dev/null || true
+  CAPABILITY_FILES=$((CAPABILITY_FILES + 3))
 fi
 
 if [[ "${WITH_DISCOVERY}" == "true" ]]; then
@@ -768,6 +770,7 @@ cat > "${OUTPUT_DIR}/package.json" << PKGJSON
     "glob": "^13.0.5",
     "js-yaml": "^4.1.1",
     "ts-loader": "^9.5.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "webpack": "^5.105.2",
     "webpack-cli": "^6.0.1"
@@ -1512,6 +1515,13 @@ breakpoint (1000 VUs, 1h), soak (20 VUs, 4h+)
 ## Available Scenarios
 ${_SCENARIO_LIST}
 
+## Agent team
+Subagents in \`.claude/agents/\` (perf-test-architect, perf-scenario-author,
+perf-guardrail-reviewer, perf-load-operator, perf-results-analyst, perf-reporter, ...)
+coordinated by the \`perf-team\` skill. Smoke before load; every heavier, unsafe or
+production run needs explicit human confirmation. This runner has no \`--client\` flag
+and does not enforce scenario gates — agents check \`export const gate\` themselves.
+
 ## Conventions
 - Scenarios: \`scenarios/{type}/{name}.ts\` (types: api, integration, browser, mixed)
 - Services: \`lib/services/{layer}/{ServiceName}.ts\`
@@ -1562,6 +1572,25 @@ Use this skill when interpreting k6 test results and performance data.
 - p95 < 2000ms, p99 < 5000ms, error < 1%, checks >= 95%
 SKILL_ANALYSIS
   log_success "Generated .claude/skills/"
+
+  # Performance agent team: subagents, the repo skills they load, and the Bash guard
+  # their PreToolUse hooks call. Skills the monorepo installs on demand (gitignored,
+  # e.g. third-party ones restored from skills-lock.json) are not vendored.
+  if [[ -d "${ROOT_DIR}/.claude/agents" ]]; then
+    mkdir -p "${OUTPUT_DIR}/.claude/agents"
+    cp "${ROOT_DIR}/.claude/agents/"*.md "${OUTPUT_DIR}/.claude/agents/"
+    for skill_dir in "${ROOT_DIR}/.claude/skills/"*/; do
+      skill_dir="${skill_dir%/}"
+      [[ -f "${skill_dir}/SKILL.md" ]] || continue
+      if git -C "${ROOT_DIR}" check-ignore -q "${skill_dir}" 2>/dev/null; then
+        log_debug "Skipping ignored skill $(basename "${skill_dir}")"
+        continue
+      fi
+      cp -R "${skill_dir}" "${OUTPUT_DIR}/.claude/skills/"
+    done
+    cp "${ROOT_DIR}/bin/agent-bash-guard.js" "${OUTPUT_DIR}/bin/agent-bash-guard.js"
+    log_success "Exported .claude/agents/ (perf team) + skills + bin/agent-bash-guard.js"
+  fi
 fi
 
 # ── export-manifest.json (T-309) ─────────────────────────────────────────────
@@ -2137,6 +2166,8 @@ This project includes Claude Code configuration for AI-assisted performance test
 
 - **k6 Load Test** — Create and execute k6 scenarios following framework patterns
 - **k6 Analysis** — Analyze test results and provide optimization recommendations
+- **perf-team** — Orchestrates the performance agent team in `.claude/agents/`
+  (plan → author → validate → smoke → load (human-gated) → analyze → report)
 
 ### Usage
 

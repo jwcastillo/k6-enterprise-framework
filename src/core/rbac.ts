@@ -43,6 +43,10 @@ const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
       "spike",
       "breakpoint",
       "soak",
+      "throughput-low",
+      "throughput-medium",
+      "throughput-high",
+      "throughput-ramp",
     ],
     allowedOperations: [
       "execute_test",
@@ -72,6 +76,10 @@ const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
       "spike",
       "breakpoint",
       "soak",
+      "throughput-low",
+      "throughput-medium",
+      "throughput-high",
+      "throughput-ramp",
     ],
     allowedOperations: [
       "execute_test",
@@ -89,7 +97,9 @@ const ROLE_PERMISSIONS: Record<Role, RolePermissions> = {
     ],
   },
   developer: {
-    allowedProfiles: ["smoke", "quick", "load"],
+    // Steady expected-load profiles only. throughput-low/-medium are constant-rate
+    // equivalents of "load"; throughput-high/-ramp push towards capacity (elevated).
+    allowedProfiles: ["smoke", "quick", "load", "throughput-low", "throughput-medium"],
     allowedOperations: ["execute_test", "view_reports", "query_audit"],
   },
 };
@@ -101,6 +111,8 @@ const ELEVATED_PROFILES: Record<string, ProtectedOperation> = {
   breakpoint: "execute_breakpoint",
   soak: "execute_soak",
   capacity: "execute_stress",
+  "throughput-high": "execute_stress",
+  "throughput-ramp": "execute_stress",
 };
 
 // ── Identity resolution ───────────────────────────────────────────────────────
