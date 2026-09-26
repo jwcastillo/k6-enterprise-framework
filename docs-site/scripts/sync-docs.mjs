@@ -24,8 +24,6 @@ const CLIENTS = [
   '_benchmark',
   'examples',
   'airline-accelerator',
-  'latam-airlines',
-  'falabella-seguros',
 ];
 
 // Client display names
@@ -34,8 +32,6 @@ const CLIENT_NAMES = {
   '_benchmark': 'Benchmark',
   'examples': 'Examples',
   'airline-accelerator': 'Airline Accelerator',
-  'latam-airlines': 'LATAM Airlines',
-  'falabella-seguros': 'Falabella Seguros',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

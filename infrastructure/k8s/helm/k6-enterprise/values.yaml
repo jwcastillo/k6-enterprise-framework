@@ -52,7 +52,7 @@ test:
   # Optional Secret mounted read-only for data files that carry secrets/PII
   # (e.g. captured session cookies for the replay scenario). Create it first:
   #   kubectl create secret generic k6-replay-data \
-  #     --from-file=replay-capturado.json=clients/falabella-auto/data/replay-capturado.json
+  #     --from-file=replay-capturado.json=clients/<client>/data/replay-capturado.json
   # Then point the scenario at it: -e REPLAY_FILE=<mountPath>/replay-capturado.json
   dataSecret:
     name: "" # e.g. k6-replay-data; empty disables the mount

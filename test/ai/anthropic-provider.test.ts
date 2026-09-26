@@ -121,6 +121,27 @@ describe("AnthropicProvider", () => {
     expect(callArg.messages.every((m: any) => m.role !== "system")).toBe(true);
   });
 
+  it("chat() forwards temperature only to models that accept it", async () => {
+    const provider = new AnthropicProvider({ apiKey: "sk-test" });
+    const cases: Array<[string, boolean]> = [
+      ["claude-sonnet-4-6", true],
+      ["claude-opus-4-6", true],
+      ["claude-sonnet-4-20250514", true],
+      ["claude-haiku-4-5", true],
+      ["claude-opus-4-7", false],
+      ["claude-opus-4-8", false],
+      ["claude-opus-5", false],
+      ["claude-sonnet-5", false],
+      ["claude-fable-5-1", false],
+    ];
+    for (const [model, sent] of cases) {
+      mockCreate.mockResolvedValueOnce(makeSdkResponse({ text: "ok" }));
+      await provider.chat([{ role: "user", content: "hi" }], { model, temperature: 0.2 });
+      const callArg = mockCreate.mock.calls.at(-1)![0];
+      expect("temperature" in callArg, model).toBe(sent);
+    }
+  });
+
   it("chat() with explicit options.system does NOT hoist from messages", async () => {
     mockCreate.mockResolvedValueOnce(makeSdkResponse({ text: "ok" }));
 

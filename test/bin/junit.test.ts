@@ -1,7 +1,7 @@
 /**
  * JUnit XML export for k6 --summary-export JSON.
  *
- * Ported from the LATAM framework (bin/reporting/junit.js).
+ * Ported from a previous internal framework (bin/reporting/junit.js).
  * In `thresholds`, `true` means the threshold FAILED.
  */
 

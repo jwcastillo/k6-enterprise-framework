@@ -1,6 +1,14 @@
 {
   "version": 1,
   "skills": {
+    "archify": {
+      "source": "tt-a1i/archify",
+      "sourceUrl": "https://github.com/tt-a1i/archify.git",
+      "ref": "v2.16.0",
+      "sourceType": "github",
+      "skillPath": "archify/SKILL.md",
+      "computedHash": "846a98139bf428f52dc42468cd0cb54c805c22274eda5e5c588bc979f1fe5c8c"
+    },
     "dashboarding": {
       "source": "grafana/skills",
       "sourceType": "github",

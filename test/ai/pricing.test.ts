@@ -16,8 +16,8 @@ describe("pricing — loadPricing (AI-02 D-06..D-09)", () => {
     expect(table.default).toBe("claude-sonnet-4-6");
     expect(table.models["claude-sonnet-4-6"].input_usd_per_1k).toBe(0.003);
     expect(table.models["claude-sonnet-4-6"].output_usd_per_1k).toBe(0.015);
-    expect(table.models["claude-opus-4-7"].input_usd_per_1k).toBe(0.015);
-    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.075);
+    expect(table.models["claude-opus-4-7"].input_usd_per_1k).toBe(0.005);
+    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.025);
   });
 
   it("LLM_INPUT_USD_PER_1K override targets DEFAULT model only (D-07)", () => {
@@ -25,15 +25,15 @@ describe("pricing — loadPricing (AI-02 D-06..D-09)", () => {
     expect(table.models["claude-sonnet-4-6"].input_usd_per_1k).toBe(0.002);
     expect(table.models["claude-sonnet-4-6"].output_usd_per_1k).toBe(0.015);
     // Opus is NOT touched
-    expect(table.models["claude-opus-4-7"].input_usd_per_1k).toBe(0.015);
-    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.075);
+    expect(table.models["claude-opus-4-7"].input_usd_per_1k).toBe(0.005);
+    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.025);
   });
 
   it("LLM_OUTPUT_USD_PER_1K override targets DEFAULT model only (D-07)", () => {
     const table = loadPricing({ env: { LLM_OUTPUT_USD_PER_1K: "0.030" } });
     expect(table.models["claude-sonnet-4-6"].output_usd_per_1k).toBe(0.03);
     expect(table.models["claude-sonnet-4-6"].input_usd_per_1k).toBe(0.003);
-    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.075);
+    expect(table.models["claude-opus-4-7"].output_usd_per_1k).toBe(0.025);
   });
 
   it("empty-string env value is treated as unset (no override)", () => {
@@ -80,8 +80,8 @@ describe("pricing — lookupRate (AI-02 D-08)", () => {
   it("returns opus rate when opus is requested", () => {
     const r = lookupRate(table, "claude-opus-4-7");
     expect(r.model).toBe("claude-opus-4-7");
-    expect(r.rate.input_usd_per_1k).toBe(0.015);
-    expect(r.rate.output_usd_per_1k).toBe(0.075);
+    expect(r.rate.input_usd_per_1k).toBe(0.005);
+    expect(r.rate.output_usd_per_1k).toBe(0.025);
   });
 
   it("falls back to default model when model is unknown (D-08, no throw)", () => {
