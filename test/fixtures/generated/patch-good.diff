@@ -1,0 +1,10 @@
+--- a/clients/acme/scenarios/api/login.ts
++++ b/clients/acme/scenarios/api/login.ts
+@@ -10,7 +10,7 @@ export const options = {
+   thresholds: { http_req_duration: ["p(95)<500"] },
+ };
+ export default function () {
+-  const res = http.get(`${BASE}/login`);
++  const res = http.get(`${BASE}/v2/login`, { tags: { name: "login" } });
+   check(res, { "status 200": (r) => r.status === 200 });
+ }

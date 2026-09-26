@@ -85,8 +85,10 @@ un objetivo del §1; nada de relleno.
 
 ## Guardarraíles
 
-- **Sin PII ni secretos.** Nunca RUT reales, cookies, tokens, correos de
-  personas, ni `data/replay-capturado.json`. Solo métricas agregadas.
+- **Sin PII ni secretos.** Nunca documentos de identidad reales, cookies, tokens,
+  correos de personas ni capturas de sesión (HAR, replays). Solo métricas agregadas.
+- **Revisión antes de publicar.** El borrador pasa por `node bin/validate-generated.js
+  --kind=report` y lo aprueba una persona antes de compartirlo con el cliente.
 - **Honestidad de método.** Declarar las limitaciones que apliquen a esa
   campaña, tomándolas del PLAN, por ejemplo:
   - **Replay (techo, PLAN §5.5):** con replay de capturas se mide capacidad del

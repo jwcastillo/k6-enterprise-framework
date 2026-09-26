@@ -357,7 +357,10 @@ async function runTscCheck(
 
   try {
     fsModule.writeFileSync(tmpFile, code, "utf-8");
-    execSync(`npx tsc --noEmit --strict --target ES2020 --moduleResolution node "${tmpFile}"`, {
+    // The repo's own tsc binary. Resolving it through the npm package runner
+    // would download the unrelated `tsc` package whenever typescript is missing.
+    const tsc = join(FRAMEWORK_ROOT, "node_modules", ".bin", "tsc");
+    execSync(`"${tsc}" --noEmit --strict --target ES2020 --moduleResolution node "${tmpFile}"`, {
       cwd: FRAMEWORK_ROOT,
       stdio: "pipe",
       timeout: 15000,
@@ -524,7 +527,7 @@ export interface CreateJiraTicketParams {
   description: string;
   priority?: "Highest" | "High" | "Medium" | "Low" | "Lowest";
   labels?: string[];
-  /** Credenciales: si no se pasan, se leen de env vars (CHK-SEC-117) */
+  /** Ignorados: las credenciales se leen solo de JIRA_URL / JIRA_USER / JIRA_API_TOKEN (CHK-SEC-117). Se mantienen por compatibilidad. */
   jiraUrl?: string;
   jiraUser?: string;
   jiraToken?: string;

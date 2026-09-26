@@ -1,6 +1,6 @@
 ---
 name: performance-engineering
-description: Diagnose, architect, analyze, and report on system performance at FAANG-level rigor. Use whenever the user asks about performance engineering, latency, capacity planning, load/stress/soak testing (k6, JMeter, Gatling, Locust), bottleneck diagnosis, observability (Grafana, Prometheus, Datadog, OpenTelemetry), SLI/SLO, error budgets, distributed tracing, profiling, Core Web Vitals, percentiles (p95/p99/p99.9), tail latency. Trigger on casual phrasing — "the system is slow", "diagnose this latency", "analyze this Grafana dashboard". Also for perf architecture and metric-source discrepancies. **Uses expert profiles for selective loading** — auto-detects stack/domain profiles (java, spring-boot, nodejs, golang, python, dotnet, php, frontend, db-perf, observability, load-testing, microservices, k8s variants, serverless, etc.) to load only relevant references. Also activates **agent team mode** (PM + Scrum Master + Tech Lead + Engineer + SRE + QA, GSD cadence) when user asks for "team mode" or "scrum mode".
+description: Diagnose, architect, analyze, and report on system performance at FAANG-level rigor. Use whenever the user asks about performance engineering, latency, capacity planning, load/stress/soak testing (k6, JMeter, Gatling, Locust), bottleneck diagnosis, observability (Grafana, Prometheus, Datadog, OpenTelemetry), SLI/SLO, error budgets, distributed tracing, profiling, Core Web Vitals, percentiles (p95/p99/p99.9), tail latency. Trigger on casual phrasing — "the system is slow", "diagnose this latency", "analyze this Grafana dashboard". Also for perf architecture and metric-source discrepancies. **Uses expert profiles for selective loading** — auto-detects stack/domain profiles (java, spring-boot, nodejs, golang, python, dotnet, php, frontend, db-perf, observability, load-testing, microservices, k8s variants, serverless, etc.) to load only relevant references. Also activates **agent team mode** (PM + Scrum Master + Tech Lead + Engineer + SRE + QA, GSD cadence) when user asks for "team mode" or "scrum mode". Not for general coding or passing complaints unrelated to measurable performance. It diagnoses and reports; code changes and commits are only proposed, each applied after explicit user approval.
 ---
 
 # Performance Engineering (FAANG-level)
@@ -72,7 +72,7 @@ The user may provide a **context document** describing the system under analysis
 **On every conversation start, before doing anything else:**
 
 1. **Check for a context document**. Look for: an attached file with a name suggesting context (`context.md`, `system-context.md`, `architecture.md`, `runbook.md`, project knowledge in the chat, or a paste at the top of the conversation), and uploaded documents in `/mnt/user-data/uploads/`.
-2. **If found**: read it fully before responding. Internalize architecture, known issues, ADRs, and the inventory of available tools. Don't ask the user for things the context document already provides — that wastes their time and signals you didn't read it.
+2. **If found**: read it fully before responding. Internalize architecture, known issues, ADRs, and the inventory of available tools. Don't re-request what the context document already provides — that wastes their time and signals you didn't read it.
 3. **If not found and the task is non-trivial**: ask the user *once* whether a context document exists. If they don't have one, offer to help them create one using the template in `references/context-document-template.md` — it pays off across every future session.
 4. **Acknowledge the context briefly** in your first substantive response: "Working from the context doc — system is X, known constraints are Y, available tools include Z." This confirms you read it and surfaces what you'll rely on.
 
@@ -105,7 +105,7 @@ When the agent proposes a perf change (in any mode — diagnosis, design, code r
 4. **Measurement plan** — how we'll verify the hypothesis post-change
 5. **Verification report** post-change, comparing predicted vs measured
 
-If any of these are missing, the agent says so explicitly and either **requests** the data from the user or **executes** the measurement directly (via Grafana MCP queries, k6 runs, log analysis, etc. — depending on available tools and access).
+If any of these are missing, the agent says so explicitly and either **requests** the data from the user or **executes** the measurement directly (via Grafana MCP queries, k6 runs, log analysis, etc. — depending on available tools and access). Read-only queries are fine; any run that sends load (k6 or otherwise) needs the user's confirmation of the target and profile first, and never goes to production without their explicit approval.
 
 **When the user pushes for a recommendation without evidence**: push back kindly. "I can give you my best guess, but stating it as engineering would be misleading. Here's what we'd need to know with confidence: <specific data requests>."
 

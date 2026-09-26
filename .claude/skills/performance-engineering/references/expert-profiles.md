@@ -347,7 +347,7 @@ Triggers: `audit this skill`, `audit the skill`, `update the skill`, `revisar el
 
 Bundle: `skill-self-maintenance.md` + `code-review-commit-workflow.md` + `expert-profiles.md` (the catalog the audit checks against)
 
-Honest scope: documented workflow (NOT autonomous self-update) for keeping the skill current — periodic audit (staleness detection across version-specific content, link rot, outdated claims, missing emerging topics, internal consistency), research-and-propose mode (use web_search + web_fetch to gather current state from authoritative sources, draft updates in skill voice, propose as atomic commits with explicit per-commit authorization), model-upgrade review (when Anthropic ships a new model, review and update model-specific guidance in agent-team-orchestration.md, llm-perf-and-tokens.md, SKILL.md). Quality gates for proposed updates (source citation, currency, cross-source confirmation, voice consistency, no bluffing). When to retire content vs update it.
+Honest scope: documented workflow (NOT autonomous editing of the skill) for keeping the skill current — periodic audit (staleness detection across version-specific content, link rot, outdated claims, missing emerging topics, internal consistency), research-and-propose mode (use web_search + web_fetch to gather current state from authoritative sources, draft updates in skill voice, propose as atomic commits with explicit per-commit authorization), model-upgrade review (when Anthropic ships a new model, review and update model-specific guidance in agent-team-orchestration.md, llm-perf-and-tokens.md, SKILL.md). Quality gates for proposed updates (source citation, currency, cross-source confirmation, voice consistency, no bluffing). When to retire content vs update it.
 
 **Critical**: this profile does NOT enable autonomous editing. Every change requires explicit user authorization, same as `code-review` profile. The skill provides the workflow, the user remains in control.
 
@@ -436,7 +436,7 @@ Explicit opt-out. No profile activated. Claude reads SKILL.md and pulls referenc
 ## Anti-patterns
 
 - **Aggressive auto-detection** — don't activate profile from a single weak trigger ("the system is slow" is too generic). Wait for two signals or ask.
-- **Profile lock-in** — when the conversation drifts, escalate (add a profile), don't refuse to look at the new dimension.
+- **Profile lock-in** — when the conversation drifts, escalate (add a profile) instead of ignoring the new dimension.
 - **Refusing user override** — if the user says `"usá nodejs"` and the message looks Java-like, trust the user. They know their stack.
 - **Silent activation** — always announce which profile was activated and offer to combine / change.
 - **Pretending coverage** — for `dotnet` and `php` profiles where the skill doesn't have dedicated references, say so honestly in the disclosure. Don't bluff.

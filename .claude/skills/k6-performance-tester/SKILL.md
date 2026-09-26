@@ -27,7 +27,7 @@ The framework lives at: `k6-framework/` inside the project.
 
 ## Client-Specific Skills
 
-Each real client repo ships its own portable skill at `clients/<client>/skill/SKILL.md`. These travel with the client when it is exported as a standalone repo, so anyone cloning the client gets the conventions without needing personal `~/.claude/skills/` config.
+Each real client repo ships its own portable skill at `clients/<client>/skill/SKILL.md`. These travel with the client when it is exported as a standalone repo, so anyone cloning the client gets the conventions without needing a personal skills setup.
 
 | Client | Per-client skill (canonical) | Global pointer |
 |--------|------------------------------|----------------|
@@ -445,6 +445,8 @@ export const options: Options = scenarioOptions("funnel-name", {
 
 ### Available Profiles (via K6_PROFILE)
 
+Only `smoke` and `quick` are safe by default. The heavier profiles degrade the target by design: run them only against an environment the user has confirmed, never production without their explicit approval (`bin/target-guard.js` refuses it unless `K6_ALLOW_PROD_LOAD=true`).
+
 | Profile | VUs | Duration | Purpose |
 |---------|-----|----------|---------|
 | smoke | 1-2 | 1 min | Verify operational |
@@ -762,8 +764,8 @@ Just create files under `scenarios/` and run `npm run build`.
 6. Create unit test scenarios in `scenarios/api/` (one per endpoint)
 7. Create integration scenarios in `scenarios/integration/` (funnel pattern)
 8. Create mixed scenarios in `scenarios/mixed/` (weighted, if applicable)
-9. Run `npm run build` to verify webpack compilation
-10. Run `npx tsc --noEmit` to verify TypeScript types
+9. Run `pnpm build` to verify webpack compilation
+10. Run `pnpm typecheck` to verify TypeScript types
 11. Test with smoke profile: `./bin/run-test.sh --client=<name> --scenario=api/health --profile=smoke`
 
 ---
@@ -1071,6 +1073,7 @@ const rawUsers = new SharedArray("users", function () {
   return parseCsv(open("../../data/users.csv"));
 });
 
+// Use a dedicated test Redis: teardown's pool.cleanup() deletes every key under the prefix.
 export function setup(): { userPoolSize: number } {
   const redis = new RedisHelper();
   const result = redis.bulkLoadHashes("user:", rawUsers as Array<Record<string, string>>);

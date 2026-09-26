@@ -107,7 +107,7 @@ For local file access — reading project context docs, ADRs, runbooks the user 
 
 ### Database MCPs (Postgres / MySQL)
 
-For query plan analysis. **Always read-only.** Even when granted write, only run `EXPLAIN` / `EXPLAIN ANALYZE` / read queries.
+For query plan analysis. **Always read-only.** Even when granted write, only run `EXPLAIN` and read queries. `EXPLAIN ANALYZE` executes the statement: use it only on `SELECT`, or inside a transaction you roll back, and ask first on anything but a disposable database.
 
 ### k6 Cloud / Grafana Cloud MCP
 

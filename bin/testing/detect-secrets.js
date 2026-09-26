@@ -27,21 +27,8 @@ const ROOT_DIR = path.resolve(__dirname, "../..");
 
 // ── Patterns ──────────────────────────────────────────────────────────────────
 
-const SECRET_PATTERNS = [
-  { re: /Bearer\s+eyJ[A-Za-z0-9_\-\.]{20,}/,         label: "JWT Bearer token" },
-  { re: /AKIA[0-9A-Z]{16}/,                           label: "AWS Access Key ID" },
-  { re: /-----BEGIN\s+(RSA\s+)?PRIVATE KEY-----/,     label: "PEM private key" },
-  { re: /['\"]?(?:api[_-]?key|apikey|api_secret)['\"]?\s*[:=]\s*['\"][A-Za-z0-9_\-\.]{16,}['\"]/, label: "API key assignment" },
-  // El valor excluye ${...} (interpolacion) y __ENV.X (referencia a variable de
-  // entorno de k6): las dos son placeholders por construccion, no credenciales.
-  { re: /['\"]?(?:password|passwd|secret)['\"]?\s*[:=]\s*['\"](?!__ENV\.)[^'"${}\s]{8,}['\"]/i, label: "Hard-coded password" },
-  // No cuenta como credencial si el userinfo es el literal del placeholder
-  // (password/pass/user/username), esta enmascarado (***) o va entre corchetes o
-  // angulos, que es como se documenta el formato de una URL.
-  { re: /(?:postgres|mysql|mongodb|redis):\/\/(?![\[<])[^:\s\[<]*:(?!(?:password|passwd|pass|user|username|\*+)@|<)[^@\s]+@/i, label: "Connection string with credentials" },
-  { re: /ghp_[A-Za-z0-9]{36}/,                        label: "GitHub Personal Access Token" },
-  { re: /sk-[A-Za-z0-9]{20,}/,                        label: "API secret key (sk- prefix)" },
-];
+// Shared with bin/validate-generated.js and the Claude Code hooks.
+const { SECRET_PATTERNS, LINE_ALLOW_RE } = require("../_secret-patterns");
 
 // ── Allowlist (file-level) ────────────────────────────────────────────────────
 
@@ -60,7 +47,8 @@ if (fs.existsSync(SECRETSIGNORE_PATH)) {
 const DEFAULT_ALLOWLIST = new Set([
   "docs/SECURITY.md",
   "docs/CLIENT_MANAGEMENT.md",
-  "bin/testing/detect-secrets.js",   // this file itself contains the patterns
+  "bin/testing/detect-secrets.js",
+  "bin/_secret-patterns.js",         // holds the patterns themselves
   "shared/schemas/rbac-config.schema.json",
 ]);
 
@@ -99,11 +87,8 @@ for (const file of filesToCheck) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Per-line allowlist
-    if (line.includes("secret-allow") || line.includes("secretsignore")) continue;
-
-    // Skip placeholder/template values
-    if (/\$\{__ENV\.|__ENV\[|{{.*}}|<YOUR_|YOUR_API|example|placeholder/i.test(line)) continue;
+    // Per-line allowlist (secret-allow) and placeholder/template values
+    if (LINE_ALLOW_RE.test(line)) continue;
 
     for (const { re, label } of SECRET_PATTERNS) {
       if (re.test(line)) {

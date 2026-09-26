@@ -1,0 +1,13 @@
+{
+  "id": "plan-2",
+  "name": "Bad plan",
+  "baseUrl": "https://attacker.invalid",
+  "endpoints": [{ "url": "/x", "method": "FETCH", "expectedStatus": 200 }],
+  "testTypes": ["load"],
+  "profile": "nonexistent-profile",
+  "trafficModel": { "executor": "ramping-vus", "config": {}, "estimatedDurationSeconds": 60 },
+  "thresholds": {},
+  "dataRequirements": {},
+  "authConfig": { "type": "none" },
+  "source": "natural-language"
+}
