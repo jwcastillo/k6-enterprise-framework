@@ -217,7 +217,7 @@ export interface Anomaly {
   severity: Severity;
   /** Descripcion legible */
   description: string;
-  /** Timestamp ISO de la anomalia */
+  /** Timestamp ISO de la anomalia, o "idx:NNNNNN" (indice del punto) si la serie no trae timestamps */
   timestamp: string;
   /** Valor observado */
   observed: number;
