@@ -86,20 +86,30 @@ function collectExecutionSummaries(fs, path, reportsDir, month) {
     return fs.statSync(p).isDirectory() && d !== "audit" && d !== "slo-compliance";
   });
 
+  // bin/run-test.sh layout: reports/<client>/<scenario-slug>/summary-<YYYYMMDD-HHmmss>.json
+  const runFileRe = new RegExp(`^summary-${month.replace("-", "")}\\d{2}-\\d{6}\\.json$`);
+
   for (const testDir of testDirs) {
     const testPath = path.join(reportsDir, testDir);
-    const execDirs = fs.readdirSync(testPath).filter((d) => {
-      return d.startsWith(month) && fs.statSync(path.join(testPath, d)).isDirectory();
-    });
+    const entries = fs.readdirSync(testPath);
 
-    for (const execDir of execDirs) {
-      const summaryFile = path.join(testPath, execDir, "summary.json");
-      if (fs.existsSync(summaryFile)) {
-        try {
-          summaries.push(JSON.parse(fs.readFileSync(summaryFile, "utf-8")));
-        } catch {
-          /* skip corrupted */
+    // Legacy layout: reports/<client>/<test>/<YYYY-MM-DD...>/summary.json
+    const legacyFiles = entries
+      .filter((d) => d.startsWith(month) && fs.statSync(path.join(testPath, d)).isDirectory())
+      .map((d) => path.join(testPath, d, "summary.json"))
+      .filter((f) => fs.existsSync(f));
+    const runFiles = entries.filter((f) => runFileRe.test(f)).map((f) => path.join(testPath, f));
+
+    for (const summaryFile of [...legacyFiles, ...runFiles]) {
+      try {
+        const summary = JSON.parse(fs.readFileSync(summaryFile, "utf-8"));
+        // run-test.sh summaries carry no testName; the scenario directory identifies them.
+        if (summary.testName === undefined && runFiles.includes(summaryFile)) {
+          summary.testName = testDir;
         }
+        summaries.push(summary);
+      } catch {
+        /* skip corrupted */
       }
     }
   }
@@ -318,7 +328,7 @@ async function main(argv = process.argv.slice(2), deps = {}) {
   if (summaries.length === 0) {
     log.log(`No execution data found for ${opts.client} in ${opts.month}.`);
     log.log(
-      "SLO report requires execution summaries in reports/{client}/{test}/{date}/summary.json"
+      "SLO report requires execution summaries in reports/{client}/{scenario}/summary-<YYYYMMDD-HHmmss>.json"
     );
     return deps.exit(0);
   }
