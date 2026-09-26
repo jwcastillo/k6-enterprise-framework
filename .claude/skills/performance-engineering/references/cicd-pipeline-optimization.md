@@ -299,7 +299,7 @@ Common gates that should be in the pipeline (not just docs):
 - **Pipeline failure doesn't fail loud** → silent green builds with skipped tests are dangerous
 - **No flaky test quarantine** → flakiness erodes trust; quarantine + dedicated fix lane
 - **Self-hosted runners always-on** → pay for idle compute; use autoscaling
-- **`docker run --rm` for testing** when `docker-compose` would parallelize → wasted setup time
+- **One throwaway container per test run** when `docker-compose` would parallelize → wasted setup time
 
 ---
 

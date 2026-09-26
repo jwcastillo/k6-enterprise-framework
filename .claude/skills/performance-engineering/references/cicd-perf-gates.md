@@ -48,14 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install k6
-        run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 \
-            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D68
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
-            | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update && sudo apt-get install k6
+        uses: grafana/setup-k6-action@v1
       - name: Run smoke test
         run: k6 run --quiet --summary-export=summary.json tests/smoke.js
         env:
@@ -73,8 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install k6
-        run: |
-          sudo apt-get update && sudo apt-get install -y k6
+        uses: grafana/setup-k6-action@v1
       - name: Run load test
         run: |
           k6 run --quiet \
@@ -88,10 +80,12 @@ jobs:
           K6_PROMETHEUS_RW_PASSWORD: ${{ secrets.PROM_PASSWORD }}
       - name: Slack notify on failure
         if: failure()
-        run: |
-          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
-            -H 'Content-Type: application/json' \
-            -d '{"text": "Nightly perf test failed: ${{ github.run_id }}"}'
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "Nightly perf test failed: ${{ github.run_id }}"
 ```
 
 **Key points:**

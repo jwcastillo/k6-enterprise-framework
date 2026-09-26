@@ -160,7 +160,7 @@ Major capability expansion: FinOps, CI/CD pipeline optimization, and skill self-
 
 **Skill self-maintenance workflow** (`references/skill-self-maintenance.md`, ~430 lines):
 
-- **Honest framing first**: this is NOT autonomous self-update. It's a documented workflow the user invokes ("audit this skill", "research and update X", "we moved to Claude 5.0").
+- **Honest framing first**: this is NOT autonomous editing of the skill. It's a documented workflow the user invokes ("audit this skill", "research and update X", "we moved to Claude 5.0").
 - **Three maintenance modes**:
   - **Mode 1 — Periodic audit**: staleness detection checklist (version-specific content like JEP numbers / JVM distributions / Anthropic API features / cloud features / FinOps Framework versions; link rot via web_fetch spot-checks; outdated claims; missing emerging topics; internal consistency between files), audit output format with categorized findings (STALE / GAP / LINK ROT / INCONSISTENCY) before any changes
   - **Mode 2 — Research and propose**: scope confirmation → research with `web_search` + `web_fetch` using authoritative source hierarchy (OpenJDK JEPs / kubernetes.io / docs.claude.com / finops.org / Inside.java / Brendan Gregg / etc.) → draft in skill voice → propose as atomic commits via `code-review-commit-workflow.md` → per-commit user authorization → validate with `quick_validate.py`
@@ -168,7 +168,7 @@ Major capability expansion: FinOps, CI/CD pipeline optimization, and skill self-
 - **Commit message templates** for skill maintenance (`docs:` for updates / `fix:` for corrections, with source citations)
 - **Quality gates** for proposed updates: source citation, currency (6mo fast-moving / 12mo+ stable), cross-source confirmation, voice consistency, no bluffing on specifics, honest scope notes
 - **Frequency recommendations** table: periodic full audit quarterly, topic-specific research as-needed, model-upgrade review per new Anthropic model, link rot annually, internal consistency after any large addition, major framework changes as-needed
-- **What this skill does NOT auto-update**: no autonomous edits, no git push, no version bump without consent, no license changes, no INTEGRATION-NOTES edits without documenting why
+- **What this skill does NOT auto-update**: no autonomous edits, no git push, no version bump unless the user approves it, no license changes, no INTEGRATION-NOTES edits without documenting why
 - **Retire vs update** decision pattern for obsolete content
 - Tools that may help (web_search, web_fetch, view, str_replace, validate, package, future scripts/)
 
@@ -224,7 +224,7 @@ Major capability expansion: FinOps, CI/CD pipeline optimization, and skill self-
   - **Per-commit authorization protocol** with explicit message template (file, issue, why-it-matters, diff, expected impact, proposed commit message, risk, approve/reject/modify gate)
   - Conventional Commits standard for perf: type prefix rules (perf:/refactor:/fix:/feat:/test:/docs:/chore:), subject-line discipline (≤72 chars, imperative, no period, lowercase first word), body templates with what/why/measurement/trade-offs structure
   - **Commit message templates** per perf change type: N+1 fix, index addition, cache introduction, async conversion, algorithm improvement, JVM/GC tuning, resource limit / pool sizing
-  - **Hard authorization rules**: per-commit explicit approval (never batch under single "approve all"); explicit authorization for `git push`, `git push --force`, `git merge`, `git rebase`, `git reset --hard`, PR creation, tagging, deploys; pre-flight checklist before commit work (clean git status, correct branch, sign config)
+  - **Hard authorization rules**: per-commit explicit approval (never batch under single "approve all"); explicit authorization for `git push` (including force pushes), `git merge`, `git rebase`, hard resets, PR creation, tagging, deploys; pre-flight checklist before commit work (clean git status, correct branch, sign config)
   - Multi-commit projects: branch convention (`perf/<area>-<change>`), PR description template with summary / commits list / verification / rollback / risk register
   - Feature flag patterns for risky perf changes
   - Code review checklist (14-item fast-scan for reviewing PRs vs writing commits)
