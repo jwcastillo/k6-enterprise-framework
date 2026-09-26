@@ -88,9 +88,24 @@ export function globTs(dir: string): string[] {
 
 // ── CLI command execution ─────────────────────────────────────────────────────
 
+/**
+ * Timeout for CLI commands (run_test runs real load tests that can last hours).
+ * K6_MCP_CMD_TIMEOUT_MS overrides it; unset or 0 means no timeout.
+ */
+export function cliTimeoutMs(env: NodeJS.ProcessEnv = process.env): number | undefined {
+  const ms = Number(env.K6_MCP_CMD_TIMEOUT_MS ?? 0);
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+}
+
 export function runCliCommand(cmd: string, cwd = FRAMEWORK_ROOT): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execSync(cmd, { cwd, encoding: "utf-8", timeout: 300_000 });
+    const stdout = execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      timeout: cliTimeoutMs(),
+      // Load-test output can be large; the default 1 MiB buffer would kill the child.
+      maxBuffer: 256 * 1024 * 1024,
+    });
     return { stdout, stderr: "", exitCode: 0 };
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; status?: number };
