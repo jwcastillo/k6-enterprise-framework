@@ -327,45 +327,7 @@ export interface AgentConfig {
   extra?: Record<string, unknown>;
 }
 
-/** Configuracion por defecto recomendada por agente */
-export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentConfig, "agentId">> = {
-  planner: {
-    model: "claude-sonnet-4-6",
-    temperature: 0.3,
-    maxOutputTokens: 4096,
-    maxInputTokens: 16000,
-    maxSelfHealingCycles: 2,
-    timeoutSeconds: 60,
-    tokenBudgetPerInvocation: 20000,
-  },
-  builder: {
-    model: "claude-sonnet-4-6",
-    temperature: 0.1,
-    maxOutputTokens: 8192,
-    maxInputTokens: 32000,
-    maxSelfHealingCycles: 3,
-    timeoutSeconds: 120,
-    tokenBudgetPerInvocation: 50000,
-  },
-  analyst: {
-    model: "claude-sonnet-4-6",
-    temperature: 0.2,
-    maxOutputTokens: 4096,
-    maxInputTokens: 16000,
-    maxSelfHealingCycles: 2,
-    timeoutSeconds: 120,
-    tokenBudgetPerInvocation: 20000,
-  },
-  reporter: {
-    model: "claude-sonnet-4-6",
-    temperature: 0.4,
-    maxOutputTokens: 4096,
-    maxInputTokens: 16000,
-    maxSelfHealingCycles: 1,
-    timeoutSeconds: 60,
-    tokenBudgetPerInvocation: 20000,
-  },
-};
+// DEFAULT_AGENT_CONFIGS lives in src/ai/core/agent-defaults.ts: a .d.ts cannot hold runtime values.
 
 // ---------------------------------------------------------------------------
 // PipelineConfig — configuracion del pipeline completo (FR-178)
