@@ -1073,6 +1073,7 @@ const rawUsers = new SharedArray("users", function () {
   return parseCsv(open("../../data/users.csv"));
 });
 
+// Use a dedicated test Redis: teardown's pool.cleanup() deletes every key under the prefix.
 export function setup(): { userPoolSize: number } {
   const redis = new RedisHelper();
   const result = redis.bulkLoadHashes("user:", rawUsers as Array<Record<string, string>>);

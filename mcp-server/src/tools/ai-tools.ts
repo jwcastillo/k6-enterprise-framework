@@ -495,7 +495,7 @@ export interface CreateJiraTicketParams {
   description: string;
   priority?: "Highest" | "High" | "Medium" | "Low" | "Lowest";
   labels?: string[];
-  /** Credenciales: si no se pasan, se leen de env vars (CHK-SEC-117) */
+  /** Ignorados: las credenciales se leen solo de JIRA_URL / JIRA_USER / JIRA_API_TOKEN (CHK-SEC-117). Se mantienen por compatibilidad. */
   jiraUrl?: string;
   jiraUser?: string;
   jiraToken?: string;
