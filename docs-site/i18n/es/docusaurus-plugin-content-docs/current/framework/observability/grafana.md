@@ -739,5 +739,5 @@ Validar cambios antes de commitear:
 ```bash
 docker run --rm --entrypoint promtool \
   -v "$PWD/infrastructure/prometheus:/etc/prometheus" \
-  prom/prometheus:v3.14.0 check rules /etc/prometheus/alerts/k6-alerts.yml
+  prom/prometheus:v3.15.0 check rules /etc/prometheus/alerts/k6-alerts.yml
 ```

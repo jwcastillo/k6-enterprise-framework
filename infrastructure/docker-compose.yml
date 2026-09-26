@@ -73,7 +73,7 @@ services:
 
   # ── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.14.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
     container_name: k6-prometheus
     # T-135 / T-146 (CHK-SEC-098): Not exposed to host — internal only.
     # Use docker-compose.override.yml.example to expose port 9090 for local debugging.
