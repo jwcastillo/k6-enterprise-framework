@@ -73,7 +73,7 @@ services:
   # Exposed to host on port 9090 so that k6 running locally can push metrics
   # via --out experimental-prometheus-rw to http://localhost:9090/api/v1/write
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.14.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
     container_name: k6-prometheus
     ports:
       - "${PROMETHEUS_HOST_PORT:-9090}:9090"
