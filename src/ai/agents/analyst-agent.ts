@@ -37,7 +37,7 @@ import {
   createObservabilityClients,
   type ObservabilityClients,
 } from "../observability/observability-clients.js";
-import { BudgetManager } from "../core/budget-manager.js";
+import { BudgetManager, budgetedChat } from "../core/budget-manager.js";
 import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 
 // ---------------------------------------------------------------------------
@@ -168,15 +168,12 @@ export class AnalystAgent implements Agent<AnalystInput, AnalysisReport> {
     let tokensUsed = { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
 
     if (anomalies.length > 0 || regressions.length > 0) {
-      this.budget.checkBudget("analyst");
-
+      // Budget check and usage/failure recording happen inside budgetedChat.
       const llmResult = await this.analyzeWithLLM(input, anomalies, regressions, obsData);
       correlations = llmResult.correlations;
       executiveSummary = llmResult.executiveSummary;
       recommendations = llmResult.recommendations;
       tokensUsed = llmResult.tokensUsed;
-
-      this.budget.recordUsage("analyst", tokensUsed);
     } else {
       executiveSummary = `Ejecucion de ${input.testName ?? "test"} completada sin anomalias detectadas. Metricas dentro de los parametros esperados.`;
     }
@@ -296,11 +293,16 @@ export class AnalystAgent implements Agent<AnalystInput, AnalysisReport> {
   }> {
     const userPrompt = this.buildAnalysisPrompt(input, anomalies, regressions, obsData);
 
-    const response = await this.provider.chat([{ role: "user", content: userPrompt }], {
-      model: this.config.model,
-      maxTokens: this.config.maxOutputTokens,
-      temperature: this.config.temperature,
-      system: `Eres el Analyst Agent del k6 Enterprise Framework, experto en analisis de rendimiento.
+    const { response, usage: tokensUsed } = await budgetedChat(
+      this.provider,
+      this.budget,
+      "analyst",
+      [{ role: "user", content: userPrompt }],
+      {
+        model: this.config.model,
+        maxTokens: this.config.maxOutputTokens,
+        temperature: this.config.temperature,
+        system: `Eres el Analyst Agent del k6 Enterprise Framework, experto en analisis de rendimiento.
 Recibes datos de anomalias, regresiones y observabilidad y debes:
 1. Identificar correlaciones de causa raiz entre metricas y observabilidad
 2. Generar un resumen ejecutivo claro y sin jerga tecnica excesiva
@@ -312,16 +314,10 @@ REGLAS:
 - El resumen ejecutivo debe ser comprensible para un gerente tecnico
 - Las recomendaciones deben ser especificas y accionables
 - Responde SOLO con JSON valido siguiendo el schema indicado`,
-    });
+      }
+    );
 
     const raw = response.text;
-    const { usd } = this.provider.estimateCost(response.usage, this.config.model);
-    const tokensUsed = {
-      inputTokens: response.usage.inputTokens,
-      outputTokens: response.usage.outputTokens,
-      totalTokens: response.usage.totalTokens,
-      estimatedCostUsd: usd,
-    };
 
     try {
       const jsonMatch = raw.match(/```json\n?([\s\S]*?)\n?```/) ?? raw.match(/(\{[\s\S]+\})/);

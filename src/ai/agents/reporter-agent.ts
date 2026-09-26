@@ -24,7 +24,7 @@ import type {
   ValidationResult,
   TokenUsage,
 } from "../../types/ai.d";
-import { BudgetManager } from "../core/budget-manager.js";
+import { BudgetManager, budgetedChat } from "../core/budget-manager.js";
 import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 
 // ---------------------------------------------------------------------------
@@ -135,9 +135,8 @@ export class ReporterAgent implements Agent<ReporterInput, ReporterOutput> {
     }
 
     // 1. Generar resumenes via LLM (CHK-API-370)
-    this.budget.checkBudget("reporter");
+    // Budget check and usage/failure recording happen inside budgetedChat.
     const { executiveSummary, technicalSummary, tokensUsed } = await this.generateSummaries(input);
-    this.budget.recordUsage("reporter", tokensUsed);
 
     // 2. Publicar en Slack (CHK-API-371)
     let slackResult: NotificationResult | undefined;
@@ -218,23 +217,22 @@ GENERA un JSON con:
   "technicalSummary": "4-6 oraciones para ingenieros. Incluye: metricas especificas afectadas (p95, error rate), correlaciones de causa raiz mas probables, acciones recomendadas priorizadas, umbral de urgencia. Maximo 300 palabras."
 }`;
 
-    const response = await this.provider.chat([{ role: "user", content: userPrompt }], {
-      model: this.config.model,
-      maxTokens: this.config.maxOutputTokens,
-      temperature: this.config.temperature,
-      system: `Eres el Reporter Agent del k6 Enterprise Framework. Generas comunicaciones claras sobre resultados de pruebas de rendimiento.
+    const { response, usage: tokensUsed } = await budgetedChat(
+      this.provider,
+      this.budget,
+      "reporter",
+      [{ role: "user", content: userPrompt }],
+      {
+        model: this.config.model,
+        maxTokens: this.config.maxOutputTokens,
+        temperature: this.config.temperature,
+        system: `Eres el Reporter Agent del k6 Enterprise Framework. Generas comunicaciones claras sobre resultados de pruebas de rendimiento.
 REGLAS: NO expongas tokens, passwords ni datos sensibles. (CHK-SEC-114)
 Responde SOLO con JSON valido.`,
-    });
+      }
+    );
 
     const raw = response.text;
-    const { usd } = this.provider.estimateCost(response.usage, this.config.model);
-    const tokensUsed = {
-      inputTokens: response.usage.inputTokens,
-      outputTokens: response.usage.outputTokens,
-      totalTokens: response.usage.totalTokens,
-      estimatedCostUsd: usd,
-    };
 
     try {
       const jsonMatch = raw.match(/```json\n?([\s\S]*?)\n?```/) ?? raw.match(/(\{[\s\S]+\})/);
