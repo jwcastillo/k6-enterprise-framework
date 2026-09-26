@@ -3,6 +3,10 @@
 packages:
   - .
 
+# core-js postinstall only prints a funding banner
+allowBuilds:
+  core-js: false
+
 # Security overrides — force patched versions of vulnerable transitive deps
 # (Dependabot alerts on the former package-lock.json).
 overrides:
@@ -11,9 +15,4 @@ overrides:
   "@babel/core": 7.29.7
   serialize-javascript: 7.0.5
   uuid: 11.1.1
-  # gray-matter is patched (patches/) to use js-yaml 4's load/dump API,
-  # so we can force the patched js-yaml across the tree.
-  js-yaml: 4.2.0
-
-patchedDependencies:
-  gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
+  js-yaml: 4.3.2
