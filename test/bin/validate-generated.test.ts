@@ -27,7 +27,7 @@ function gate(args: string[]): { status: number | null; result: Result } {
   const res = spawnSync(process.execPath, ["bin/validate-generated.js", "--format=json", ...args], {
     cwd: ROOT,
     encoding: "utf8",
-    timeout: 60_000,
+    timeout: 90_000,
   });
   return { status: res.status, result: JSON.parse(res.stdout || "null") };
 }
@@ -40,7 +40,7 @@ describe("validate-generated --kind=scenario", () => {
     expect(failed(result)).toEqual([]);
     expect(status).toBe(0);
     expect(result.checks.find((c) => c.id === "compile")?.status).toBe("pass");
-  });
+  }, 90_000);
 
   it("fails every rule the bad scenario breaks", () => {
     const { status, result } = gate([

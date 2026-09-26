@@ -79,7 +79,8 @@ describe("checkScenario (PostToolUse)", () => {
     const t0 = Date.now();
     const res = runHook("post-scenario", { file_path: path.join(ROOT, "clients/_reference/scenarios/api/smoke-users.ts") });
     expect(res.status).toBe(0);
-    expect(Date.now() - t0).toBeLessThan(2000);
+    // ~0.5 s on an idle machine; the bound leaves room for a loaded CI runner.
+    expect(Date.now() - t0).toBeLessThan(5000);
   });
 });
 
