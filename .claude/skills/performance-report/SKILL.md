@@ -1,12 +1,12 @@
 ---
 name: performance-report
-description: Assemble and present a client-facing performance test report from k6-enterprise-framework run artifacts. Use when the user wants to turn run outputs (summary JSON, resumen etapa×escalón, analysis/message MD, comparison) into a deliverable report for a client — e.g. "armá el informe para Falabella", "present the load test results", "generá el reporte de la corrida". Delivered under the consultancy brand (default Timestamp) to the client.
+description: Assemble and present a client-facing performance test report from k6-enterprise-framework run artifacts. Use when the user wants to turn run outputs (summary JSON, resumen etapa×escalón, analysis/message MD, comparison) into a deliverable report for a client — e.g. "armá el informe para <cliente>", "present the load test results", "generá el reporte de la corrida". Delivered under the consultancy brand (default Timestamp) to the client.
 ---
 
 # Performance Report — entregable para el cliente
 
 Convierte los artefactos de una o varias corridas del framework en **un informe
-que la consultora (Timestamp) presenta al cliente** (p. ej. Falabella). No corre
+que la consultora (Timestamp) presenta al cliente**. No corre
 tests ni toca producción: solo consume artefactos ya generados y arma/presenta
 el documento.
 
@@ -102,8 +102,8 @@ un objetivo del §1; nada de relleno.
 
 ## Ejemplo de invocación
 
-> "armá el informe para Falabella de la corrida de esta noche"
+> "armá el informe para <cliente> de la corrida de esta noche"
 
-Lee `reports/falabella-auto/flow_replay-cifrado/` (o el flujo corrido), toma las
+Lee `reports/<cliente>/<escenario>/` (o el flujo corrido), toma las
 tablas etapa × escalón, arma la estructura, aplica el guardarraíl del techo del
-replay, y publica el Claude Doc "Informe de carga Falabella — <fecha>".
+replay, y publica el Claude Doc "Informe de carga <Cliente> — <fecha>".

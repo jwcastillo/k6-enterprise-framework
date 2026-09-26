@@ -1,7 +1,7 @@
 /**
  * Capacity search — step evaluation and the ramp → binary → confirm algorithm.
  *
- * Ported from the LATAM framework (bin/testing/find-capacity.js).
+ * Ported from a previous internal framework (bin/testing/find-capacity.js).
  * runStep is faked here: no k6, no network.
  */
 
