@@ -73,7 +73,7 @@ services:
 
   # ── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.14.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
     container_name: k6-prometheus
     # T-135 / T-146 (CHK-SEC-098): Not exposed to host — internal only.
     # Use docker-compose.override.yml.example to expose port 9090 for local debugging.
@@ -299,7 +299,7 @@ services:
   # Only starts when: docker compose --profile run up k6
   # T-146: Only port 6565 (k6 REST API) exposed to host from this service.
   k6:
-    image: grafana/k6:${K6_VERSION:-2.2.0}
+    image: grafana/k6:${K6_VERSION:-2.3.0}
     container_name: k6-runner
     profiles:
       - run

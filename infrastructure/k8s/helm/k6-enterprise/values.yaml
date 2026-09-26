@@ -22,7 +22,7 @@
 # ── Image ─────────────────────────────────────────────────────────────────────
 image:
   repository: grafana/k6
-  tag: "0.54.0"
+  tag: "2.3.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

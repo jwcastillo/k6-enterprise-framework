@@ -82,7 +82,7 @@ jobs:
       # ── 1. Checkout ─────────────────────────────────────────────────────────
       # fetch-depth: 0 so that a committed baseline from a prior commit is accessible
       - name: "Checkout repository"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -93,19 +93,19 @@ jobs:
       # ── 3. Go toolchain ─────────────────────────────────────────────────────
       # Required for bin/compare.sh Tier B: go install github.com/jwcastillo/k6-compare@latest
       - name: "Setup Go"
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: "1.26.4"
+          go-version: "1.26.8"
 
       # ── 4. Node.js + pnpm ───────────────────────────────────────────────────
       # pnpm is the only supported package manager for this repo (CLAUDE.md constraint)
       - name: "Setup pnpm"
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: latest
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "pnpm"
@@ -167,7 +167,7 @@ jobs:
       # ── 6. Upload artifacts ─────────────────────────────────────────────────
       - name: "Upload run artifacts"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "baseline-gate-${{ github.event.inputs.client || inputs.client || '_reference' }}-${{ github.run_id }}"
           path: |
