@@ -1,0 +1,13 @@
+# SkillSpector baseline for .claude/skills/dashboarding — triaged in security/skillspector-triage.md.
+# Rules match rule id + file + finding text; every entry carries its verdict and reason.
+version: 2
+scanner_version: 2.12.0
+rules:
+- id: "E1"
+  path: "SKILL.md"
+  message: "*curl -s -X POST -H \"Authorization: Bearer $TOKEN\" \\*"
+  reason: "FP: Documented Grafana HTTP API call to the user's own $GRAFANA with their $TOKEN; that is the skill's purpose, no third-party destination. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "SKILL.md"
+  reason: "TP – upstream PR (semantic, LOW): Pushes use overwrite: true without warning that an existing dashboard with the same uid/title is replaced; should check first or warn. Vendored from grafana/skills (skills-lock.json); not edited locally."
+fingerprints: []

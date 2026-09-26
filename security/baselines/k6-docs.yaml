@@ -1,0 +1,35 @@
+# SkillSpector baseline for .claude/skills/k6-docs — triaged in security/skillspector-triage.md.
+# Rules match rule id + file + finding text; every entry carries its verdict and reason.
+version: 2
+scanner_version: 2.12.0
+rules:
+- id: "P2"
+  path: "references/testing-workflow.md"
+  message: "*<!-- md-k6:skip -->` comment)*"
+  reason: "FP: `<!-- md-k6:skip -->` is the literal docs-tooling marker being documented, inside inline code; no hidden instruction. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "LP3"
+  path: "SKILL.md"
+  reason: "TP – upstream PR: SKILL.md has no allowed-tools frontmatter; declaring the tool scope is a cheap least-privilege improvement upstream. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "RA2"
+  path: "references/troubleshooting.md"
+  message: "*add to ~/.bashrc*"
+  reason: "FP: Troubleshooting tip telling the human to add npm's bin dir to PATH in their shell rc; the agent is not told to persist anything. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "TP4"
+  path: "SKILL.md"
+  reason: "TP – upstream PR (semantic, MEDIUM): Description does not disclose that a helper installs a global third-party npm package (agent-browser). Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "SKILL.md"
+  reason: "TP – upstream PR (semantic, LOW): Validation steps switch the user's k6 checkout to master and pull without checking git status or asking. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "references/agent-browser-reference.md"
+  reason: "TP – upstream PR (semantic, LOW): Tells the agent to npm install -g agent-browser without asking the user. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "references/testing-workflow.md"
+  reason: "TP – upstream PR (semantic, LOW): git checkout/pull master in the user's repo without checking for local work. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "references/workflows/review.md"
+  reason: "TP – upstream PR (semantic, LOW): Checks out branches in several repos without warning about uncommitted work. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SDI-2"
+  path: "scripts/check_agent_browser.sh"
+  reason: "TP – upstream PR (semantic, LOW): Script installs an unpinned global npm package outside the declared scope. Vendored from grafana/skills (skills-lock.json); not edited locally."
+fingerprints: []

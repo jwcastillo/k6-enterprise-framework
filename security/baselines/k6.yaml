@@ -1,0 +1,32 @@
+# SkillSpector baseline for .claude/skills/k6 — triaged in security/skillspector-triage.md.
+# Rules match rule id + file + finding text; every entry carries its verdict and reason.
+version: 2
+scanner_version: 2.12.0
+rules:
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*examples/http.js (partial)*"
+  reason: "FP: Scanner limitation: the static shell parser hit its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text) or a missing repo-path reference; not evasion. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*examples/websocket.js (partial)*"
+  reason: "FP: Scanner limitation: the static shell parser hit its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text) or a missing repo-path reference; not evasion. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*examples/metrics.js (partial)*"
+  reason: "FP: Scanner limitation: the static shell parser hit its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text) or a missing repo-path reference; not evasion. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*examples/ext-faker.js (partial)*"
+  reason: "FP: Scanner limitation: the static shell parser hit its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text) or a missing repo-path reference; not evasion. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*SKILL.md (partial)*"
+  reason: "FP: Scanner limitation: the static shell parser hit its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text) or a missing repo-path reference; not evasion. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "LP3"
+  path: "SKILL.md"
+  reason: "TP – upstream PR: SKILL.md has no allowed-tools frontmatter; declaring the tool scope is a cheap least-privilege improvement upstream. Vendored from grafana/skills (skills-lock.json); not edited locally."
+- id: "SQP-2"
+  path: "SKILL.md"
+  reason: "TP – upstream PR (semantic, MEDIUM): Step 5 validates with a real k6 run without asking; the validation run sends traffic to whatever the script targets. Should ask for or confirm a non-production target. In this repo the PreToolUse hook blocks bare k6 run anyway. Vendored from grafana/skills (skills-lock.json); not edited locally."
+fingerprints: []

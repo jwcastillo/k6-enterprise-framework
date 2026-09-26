@@ -1,0 +1,28 @@
+# SkillSpector baseline for .claude/skills/performance-engineering — triaged in security/skillspector-triage.md.
+# Rules match rule id + file + finding text; every entry carries its verdict and reason.
+version: 2
+scanner_version: 2.12.0
+rules:
+- id: "AE1"
+  path: "SKILL.md"
+  message: "*(partial)*"
+  reason: "FP: Scanner limitation, not evasion: the static shell parser hits its span limit on markdown/JS (backtick code spans, `${obj.prop}` template literals, `<placeholder>` text), and semantic runs hit per-reference runtime limits on a different set of references each time. AE1 only records incomplete coverage of a referenced file."
+- id: "P2"
+  path: "references/web-vitals-deep-dive.md"
+  message: "*<!-- 1. Preload the LCP image with high priority -->*"
+  reason: "FP: HTML comments inside ```html performance examples; the regex spans DOTALL from one comment to a keyword pages later. Visible code, not hidden instructions."
+- id: "P2"
+  path: "references/web-vitals-deep-dive.md"
+  message: "*<!-- 2. Reserve space for ads / embeds -->*"
+  reason: "FP: HTML comments inside ```html performance examples; the regex spans DOTALL from one comment to a keyword pages later. Visible code, not hidden instructions."
+- id: "AS3"
+  path: "INTEGRATION-NOTES.md"
+  message: "*skills/java-performance/SKILL.md*"
+  reason: "FP: Attribution link to the upstream source of integrated guidance (a URL ending in SKILL.md); the skill never reads other skills."
+- id: "AS3"
+  path: "README.md"
+  message: "*skills/java-performance/SKILL.md*"
+  reason: "FP: Attribution link to the upstream source of integrated guidance (a URL ending in SKILL.md); the skill never reads other skills."
+- id: "SQP-3"
+  reason: "FP (semantic only, LOW): the profile-activation templates are intentionally in Spanish for the maintainer; a style note, not a safety issue."
+fingerprints: []
