@@ -72,7 +72,7 @@ The user may provide a **context document** describing the system under analysis
 **On every conversation start, before doing anything else:**
 
 1. **Check for a context document**. Look for: an attached file with a name suggesting context (`context.md`, `system-context.md`, `architecture.md`, `runbook.md`, project knowledge in the chat, or a paste at the top of the conversation), and uploaded documents in `/mnt/user-data/uploads/`.
-2. **If found**: read it fully before responding. Internalize architecture, known issues, ADRs, and the inventory of available tools. Don't ask the user for things the context document already provides — that wastes their time and signals you didn't read it.
+2. **If found**: read it fully before responding. Internalize architecture, known issues, ADRs, and the inventory of available tools. Don't re-request what the context document already provides — that wastes their time and signals you didn't read it.
 3. **If not found and the task is non-trivial**: ask the user *once* whether a context document exists. If they don't have one, offer to help them create one using the template in `references/context-document-template.md` — it pays off across every future session.
 4. **Acknowledge the context briefly** in your first substantive response: "Working from the context doc — system is X, known constraints are Y, available tools include Z." This confirms you read it and surfaces what you'll rely on.
 

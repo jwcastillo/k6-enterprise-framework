@@ -27,7 +27,7 @@ The framework lives at: `k6-framework/` inside the project.
 
 ## Client-Specific Skills
 
-Each real client repo ships its own portable skill at `clients/<client>/skill/SKILL.md`. These travel with the client when it is exported as a standalone repo, so anyone cloning the client gets the conventions without needing personal `~/.claude/skills/` config.
+Each real client repo ships its own portable skill at `clients/<client>/skill/SKILL.md`. These travel with the client when it is exported as a standalone repo, so anyone cloning the client gets the conventions without needing a personal skills setup.
 
 | Client | Per-client skill (canonical) | Global pointer |
 |--------|------------------------------|----------------|
@@ -762,8 +762,8 @@ Just create files under `scenarios/` and run `npm run build`.
 6. Create unit test scenarios in `scenarios/api/` (one per endpoint)
 7. Create integration scenarios in `scenarios/integration/` (funnel pattern)
 8. Create mixed scenarios in `scenarios/mixed/` (weighted, if applicable)
-9. Run `npm run build` to verify webpack compilation
-10. Run `npx tsc --noEmit` to verify TypeScript types
+9. Run `pnpm build` to verify webpack compilation
+10. Run `pnpm typecheck` to verify TypeScript types
 11. Test with smoke profile: `./bin/run-test.sh --client=<name> --scenario=api/health --profile=smoke`
 
 ---

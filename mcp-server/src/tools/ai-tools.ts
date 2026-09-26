@@ -347,7 +347,10 @@ async function runTscCheck(
 
   try {
     fsModule.writeFileSync(tmpFile, code, "utf-8");
-    execSync(`npx tsc --noEmit --strict --target ES2020 --moduleResolution node "${tmpFile}"`, {
+    // The repo's own tsc binary. Resolving it through the npm package runner
+    // would download the unrelated `tsc` package whenever typescript is missing.
+    const tsc = join(FRAMEWORK_ROOT, "node_modules", ".bin", "tsc");
+    execSync(`"${tsc}" --noEmit --strict --target ES2020 --moduleResolution node "${tmpFile}"`, {
       cwd: FRAMEWORK_ROOT,
       stdio: "pipe",
       timeout: 15000,

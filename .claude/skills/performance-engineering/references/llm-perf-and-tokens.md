@@ -28,13 +28,6 @@ A token is roughly ~4 characters or ~¾ of a word in English (less efficient for
 **Token-counting tools:**
 
 ```bash
-# Anthropic — count tokens via API before sending
-curl https://api.anthropic.com/v1/messages/count_tokens \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d '{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"text..."}]}'
-
 # Python SDK
 from anthropic import Anthropic
 client = Anthropic()

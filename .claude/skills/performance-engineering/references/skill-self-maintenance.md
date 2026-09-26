@@ -6,7 +6,7 @@ How to keep this skill current as the underlying domains evolve. The skill is do
 
 ## Honest framing — what this is and isn't
 
-**This is NOT**: autonomous self-update. The skill does not run by itself, modify files without invocation, or update via background process.
+**This is NOT**: autonomous editing of the skill. The skill does not run by itself, modify files without invocation, or update via background process.
 
 **This IS**: a documented workflow Claude follows when the user invokes a maintenance task. Claude:
 1. Reads the current skill content
