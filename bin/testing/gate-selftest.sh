@@ -12,7 +12,7 @@
 # Only talks to 127.0.0.1. Requires k6 on PATH.
 # Usage: bash bin/testing/gate-selftest.sh
 #
-# ponytail: the LATAM original had a fourth case (an abortOnFail threshold stopping a
+# ponytail: the original had a fourth case (an abortOnFail threshold stopping a
 # collapsed run early). Here thresholds come from the scenario or the profile, so testing
 # it would mean first building a way to inject abortOnFail from outside. Left out.
 

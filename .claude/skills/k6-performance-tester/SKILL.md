@@ -7,7 +7,7 @@ description: Enterprise k6 load testing expert. Use when creating, reviewing, or
 
 ## Overview
 
-Expert skill for building load tests using the **k6 Enterprise Framework** — a two-layer architecture with a generic core (`src/`) and client-specific implementations (`clients/`). This skill enforces the patterns and conventions established across the `_reference`, `_benchmark`, `airline-accelerator`, and `falabella-seguros` clients and the framework core.
+Expert skill for building load tests using the **k6 Enterprise Framework** — a two-layer architecture with a generic core (`src/`) and client-specific implementations (`clients/`). This skill enforces the patterns and conventions established across the `_reference`, `_benchmark` and `examples` clients and the framework core.
 
 ## When to Use This Skill
 
@@ -1384,7 +1384,6 @@ const res = client.post("/api/orders", orderData, {
 | `_reference` | Framework reference implementation | smoke-users, auth-flow, checkout-flow, test-helpers, test-redis | All patterns demonstrated |
 | `_benchmark` | Framework overhead measurement | baseline, benchmark-heavy-load | Raw vs wrapped HTTP, overhead metrics |
 | `airline-accelerator` | Production airline API | 13 scenarios (api/integration/mixed) | Funnel, weighted, correlation, factory |
-| `falabella-seguros` | Insurance SOAP campaign | 23 scenarios (14 unit + 9 flows) | Multi-endpoint, encrypted responses, domain generators |
 | `examples` | Pattern cookbook (15 examples) | See index below | One pattern per file |
 
 ---

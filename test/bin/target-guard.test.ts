@@ -1,7 +1,7 @@
 /**
  * Target guard — refuses to fire load at a target the config does not allow.
  *
- * Ported from the LATAM framework (core/Runner.ts :: checkTarget), adapted to the
+ * Ported from a previous internal framework (core/Runner.ts :: checkTarget), adapted to the
  * endpoints/services config shape used here.
  */
 

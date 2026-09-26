@@ -251,6 +251,37 @@ describe("AnomalyDetector", () => {
       // (whether it does depends on stdDev and threshold; the data has consistent drift)
       expect(result.stats).toBeDefined();
     });
+
+    it("should report a drift that ends before the last point", () => {
+      const values = [...Array(20).fill(10), ...Array(6).fill(30), ...Array(40).fill(10)];
+      const result = detector.detect({ name: "latency", values });
+      const drifts = result.anomalies.filter((a) => a.detectedBy === "cusum");
+      expect(drifts).toHaveLength(1);
+      // CUSUM crosses h a point or two after the shift starts (index 20).
+      const start = Number(drifts[0].timestamp.replace("idx:", ""));
+      expect(start).toBeGreaterThanOrEqual(20);
+      expect(start).toBeLessThan(26);
+    });
+  });
+
+  describe("series without timestamps", () => {
+    it("should keep distinct anomalies at different indices", () => {
+      const values = Array(30).fill(10);
+      values[5] = 100;
+      values[20] = 100;
+      const result = detector.detect({ name: "latency", values });
+      const zscore = result.anomalies.filter((a) => a.detectedBy === "zscore");
+      expect(zscore).toHaveLength(2);
+      expect(new Set(zscore.map((a) => a.timestamp)).size).toBe(2);
+    });
+  });
+
+  describe("IQR on near-constant series", () => {
+    it("should not flag a constant value that is not exactly representable at 3 decimals", () => {
+      const values = Array(10).fill(0.0010000000000000009);
+      const result = detector.detect({ name: "http_req_failed", values });
+      expect(result.anomalies.filter((a) => a.detectedBy === "iqr")).toHaveLength(0);
+    });
   });
 });
 

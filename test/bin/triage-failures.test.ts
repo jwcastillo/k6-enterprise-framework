@@ -1,7 +1,7 @@
 /**
  * Failure triage — log parsing, redaction and owner policy.
  *
- * Ported from the LATAM framework (bin/reporting/triage-failures.js, --self-test).
+ * Ported from a previous internal framework (bin/reporting/triage-failures.js, --self-test).
  * No network: classify() is not exercised here, only what surrounds it.
  */
 

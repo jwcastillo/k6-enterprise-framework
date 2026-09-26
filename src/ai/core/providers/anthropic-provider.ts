@@ -47,6 +47,16 @@ function mapStopReason(raw: AnthropicStopReason): ChatResponse["stopReason"] {
   }
 }
 
+/**
+ * Whether a model accepts sampling params (`temperature`). Opus 4.7+, Opus 5,
+ * Sonnet 5 and Fable reject them with a 400, so only the models known to accept
+ * them get it: Opus/Sonnet 4.0-4.6, Haiku and the Claude 3 family. Unknown
+ * (newer) models default to omitting it.
+ */
+export function acceptsTemperature(model: string): boolean {
+  return /claude-(?:opus|sonnet)-4(?:-[0-6])?(?:[-@]\d{8})?$|claude-haiku|claude-3/.test(model);
+}
+
 // ── AnthropicProvider ─────────────────────────────────────────────────────────
 
 export class AnthropicProvider implements LLMProvider {
@@ -121,7 +131,9 @@ export class AnthropicProvider implements LLMProvider {
       max_tokens: maxTokens,
       messages: sdkMessages,
       ...(system !== undefined ? { system } : {}),
-      ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...(options?.temperature !== undefined && acceptsTemperature(model)
+        ? { temperature: options.temperature }
+        : {}),
       ...(options?.stopSequences !== undefined ? { stop_sequences: options.stopSequences } : {}),
     });
 
