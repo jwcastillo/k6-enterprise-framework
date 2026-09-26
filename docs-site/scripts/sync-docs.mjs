@@ -24,8 +24,6 @@ const CLIENTS = [
   '_benchmark',
   'examples',
   'airline-accelerator',
-  'client-b',
-  'client-a',
 ];
 
 // Client display names
@@ -34,8 +32,6 @@ const CLIENT_NAMES = {
   '_benchmark': 'Benchmark',
   'examples': 'Examples',
   'airline-accelerator': 'Airline Accelerator',
-  'client-b': 'client-b',
-  'client-a': 'client-a',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

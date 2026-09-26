@@ -1,15 +1,35 @@
 {
   "name": "load",
-  "description": "Normal expected load — sustained traffic at target VUs for 10 min",
+  "description": "Normal expected load (50 req/s for 10 min) — arrival-rate open model",
+  "executor": "ramping-arrival-rate",
   "stages": [
-    { "duration": "2m",  "target": 20 },
-    { "duration": "10m", "target": 20 },
-    { "duration": "2m",  "target": 0  }
+    {
+      "duration": "2m",
+      "target": 50
+    },
+    {
+      "duration": "10m",
+      "target": 50
+    },
+    {
+      "duration": "2m",
+      "target": 0
+    }
   ],
+  "preAllocatedVUs": 30,
+  "maxVUs": 150,
   "thresholds": {
-    "http_req_duration": ["p(95)<1000", "p(99)<2000"],
-    "http_req_failed": ["rate<0.05"],
-    "checks": ["rate>=0.95"]
+    "http_req_duration": [
+      "p(95)<1000",
+      "p(99)<2000",
+      "p(99.9)<4000"
+    ],
+    "http_req_failed": [
+      "rate<0.05"
+    ],
+    "checks": [
+      "rate>=0.95"
+    ]
   },
   "maxDuration": "15m"
 }

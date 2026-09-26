@@ -121,12 +121,14 @@ export class AnomalyDetector {
       return { metric: series, anomalies: [], stats: this.computeStats(values) };
     }
 
-    const stats = this.computeStats(values);
+    const rawStats = this.computeRawStats(values);
+    const stats = roundStats(rawStats);
     const anomalies: Anomaly[] = [];
 
     // Ejecutar todos los algoritmos
     const zAnomalies = this.detectZScore(series, stats);
-    const iqrAnomalies = this.detectIQR(series, stats);
+    // IQR compares raw values against its fences, so the fences must be unrounded too.
+    const iqrAnomalies = this.detectIQR(series, rawStats);
     const cusumAnomalies = this.detectCUSUM(series, stats);
     const percentileAnomalies = this.detectPercentileDeviation(series, stats);
 
@@ -278,6 +280,25 @@ export class AnomalyDetector {
     let cumsumPos = 0;
     let cumsumNeg = 0;
     let driftStartIdx: number | null = null;
+    // CUSUM value while the drift was active (the "back under h" point has already decayed).
+    let driftCusum = 0;
+
+    // Emit a drift covering [start, end]; only drifts of at least 3 points are reported.
+    const report = (start: number, end: number): void => {
+      const driftDuration = end - start;
+      if (driftDuration < 2) return;
+      anomalies.push({
+        metric: series.name,
+        type: "drift",
+        severity: driftDuration >= 5 ? "critical" : driftDuration >= 3 ? "warning" : "info",
+        description: `CUSUM: cambio de tendencia detectado durante ${driftDuration + 1} periodos. CUSUM max=${driftCusum.toFixed(2)}.`,
+        timestamp: this.getTimestamp(series, start),
+        observed: stats.mean + driftCusum / series.values.length,
+        expected: stats.mean,
+        deviationPct: (driftCusum / (stats.mean * series.values.length)) * 100,
+        detectedBy: "cusum",
+      });
+    };
 
     series.values.forEach((value, i) => {
       cumsumPos = Math.max(0, cumsumPos + value - stats.mean - k);
@@ -285,30 +306,13 @@ export class AnomalyDetector {
 
       if (cumsumPos > h || cumsumNeg > h) {
         if (driftStartIdx === null) driftStartIdx = i;
-
-        if (i === series.values.length - 1 || (cumsumPos <= h && cumsumNeg <= h)) {
-          const driftDuration = i - (driftStartIdx ?? i);
-          if (driftDuration >= 2) {
-            // Solo reportar drifts que duran al menos 3 puntos
-            anomalies.push({
-              metric: series.name,
-              type: "drift",
-              severity: driftDuration >= 5 ? "critical" : driftDuration >= 3 ? "warning" : "info",
-              description: `CUSUM: cambio de tendencia detectado durante ${driftDuration + 1} periodos. CUSUM+=${cumsumPos.toFixed(2)}, CUSUM-=${cumsumNeg.toFixed(2)}.`,
-              timestamp: this.getTimestamp(series, driftStartIdx ?? i),
-              observed: stats.mean + Math.max(cumsumPos, cumsumNeg) / series.values.length,
-              expected: stats.mean,
-              deviationPct:
-                (Math.max(cumsumPos, cumsumNeg) / (stats.mean * series.values.length)) * 100,
-              detectedBy: "cusum",
-            });
-          }
-          driftStartIdx = null;
-        }
-      } else {
-        if (driftStartIdx !== null) driftStartIdx = null;
-        cumsumPos = Math.max(0, cumsumPos);
-        cumsumNeg = Math.max(0, cumsumNeg);
+        driftCusum = Math.max(driftCusum, cumsumPos, cumsumNeg);
+        if (i === series.values.length - 1) report(driftStartIdx, i);
+      } else if (driftStartIdx !== null) {
+        // Back under h: the drift ended at the previous point.
+        report(driftStartIdx, i - 1);
+        driftStartIdx = null;
+        driftCusum = 0;
       }
     });
 
@@ -370,6 +374,10 @@ export class AnomalyDetector {
   // -------------------------------------------------------------------------
 
   computeStats(values: number[]): SeriesStats {
+    return roundStats(this.computeRawStats(values));
+  }
+
+  private computeRawStats(values: number[]): SeriesStats {
     if (values.length === 0) {
       return { mean: 0, stdDev: 0, median: 0, p25: 0, p75: 0, iqr: 0, min: 0, max: 0, cv: 0 };
     }
@@ -387,17 +395,7 @@ export class AnomalyDetector {
     const iqr = p75 - p25;
     const cv = mean !== 0 ? stdDev / mean : 0;
 
-    return {
-      mean: round(mean),
-      stdDev: round(stdDev),
-      median: round(median),
-      p25: round(p25),
-      p75: round(p75),
-      iqr: round(iqr),
-      min: sorted[0],
-      max: sorted[n - 1],
-      cv: round(cv),
-    };
+    return { mean, stdDev, median, p25, p75, iqr, min: sorted[0], max: sorted[n - 1], cv };
   }
 
   private percentile(sortedValues: number[], p: number): number {
@@ -411,10 +409,12 @@ export class AnomalyDetector {
   }
 
   private getTimestamp(series: MetricSeries, index: number): string {
-    if (series.timestamps && series.timestamps[index]) {
+    if (series.timestamps && series.timestamps[index] !== undefined) {
       return new Date(series.timestamps[index]).toISOString();
     }
-    return new Date().toISOString();
+    // No timestamps: use a stable, sortable index key so distinct points never collide
+    // in detect()'s dedupe (a wall-clock fallback gave every point the same timestamp).
+    return `idx:${String(index).padStart(6, "0")}`;
   }
 }
 
@@ -424,6 +424,20 @@ export class AnomalyDetector {
 
 function round(n: number, decimals = 3): number {
   return Math.round(n * Math.pow(10, decimals)) / Math.pow(10, decimals);
+}
+
+function roundStats(s: SeriesStats): SeriesStats {
+  return {
+    mean: round(s.mean),
+    stdDev: round(s.stdDev),
+    median: round(s.median),
+    p25: round(s.p25),
+    p75: round(s.p75),
+    iqr: round(s.iqr),
+    min: s.min,
+    max: s.max,
+    cv: round(s.cv),
+  };
 }
 
 /**

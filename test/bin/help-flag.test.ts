@@ -22,6 +22,7 @@ const SCRIPTS: ReadonlyArray<string> = [
   "check-rbac.js",
   "clean-redis-data.js",
   "compare-results.js",
+  "discover-flow.js",
   "export-data.js",
   "generate-artifacts.js",
   "generate-data.js",

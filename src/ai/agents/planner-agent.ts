@@ -28,8 +28,8 @@ import type {
   TokenUsage,
 } from "../../types/ai.d";
 import { KnowledgeBaseManager } from "../knowledge-base/knowledge-base.js";
-import { BudgetManager } from "../core/budget-manager.js";
-import { DEFAULT_AGENT_CONFIGS } from "../../types/ai.d";
+import { BudgetManager, budgetedChat } from "../core/budget-manager.js";
+import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 import * as crypto from "crypto";
 
 // ---------------------------------------------------------------------------
@@ -139,10 +139,8 @@ export class PlannerAgent implements Agent<PlannerInput, TestPlan> {
     const parsedSpec = this.parseSpec(input);
 
     // 4. Invocar al LLM para generar el TestPlan
-    const { testPlan, tokensUsed } = await this.generateTestPlan(input, parsedSpec, ragContext);
-
-    // 5. Registrar uso de tokens en el budget manager
-    this.budget.recordUsage("planner", tokensUsed);
+    // (budget check and usage/failure recording happen inside budgetedChat)
+    const { testPlan } = await this.generateTestPlan(input, parsedSpec, ragContext);
 
     return testPlan;
   }
@@ -275,24 +273,21 @@ export class PlannerAgent implements Agent<PlannerInput, TestPlan> {
     const systemPrompt = this.buildSystemPrompt();
     const userPrompt = this.buildUserPrompt(input, parsedSpec, ragContext);
 
-    // Verificar budget antes de invocar (CHK-API-361)
-    this.budget.checkBudget("planner");
-
-    const response = await this.provider.chat([{ role: "user", content: userPrompt }], {
-      model: this.config.model,
-      maxTokens: this.config.maxOutputTokens,
-      temperature: this.config.temperature,
-      system: systemPrompt,
-    });
+    // budgetedChat checks the budget (CHK-API-361) and records usage/failures.
+    const { response, usage: tokensUsed } = await budgetedChat(
+      this.provider,
+      this.budget,
+      "planner",
+      [{ role: "user", content: userPrompt }],
+      {
+        model: this.config.model,
+        maxTokens: this.config.maxOutputTokens,
+        temperature: this.config.temperature,
+        system: systemPrompt,
+      }
+    );
 
     const raw = response.text;
-    const { usd } = this.provider.estimateCost(response.usage, this.config.model);
-    const tokensUsed = {
-      inputTokens: response.usage.inputTokens,
-      outputTokens: response.usage.outputTokens,
-      totalTokens: response.usage.totalTokens,
-      estimatedCostUsd: usd,
-    };
 
     // Parsear respuesta JSON del LLM
     let planData: Record<string, unknown>;
