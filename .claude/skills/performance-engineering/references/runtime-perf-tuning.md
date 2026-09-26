@@ -146,6 +146,8 @@ Before runtime-specific tuning, scan for these. They're language-agnostic and th
 -XX:HeapDumpPath=/data/heapdumps/
 ```
 
+A heap dump is a full copy of process memory (tokens, session data, PII): restrict access to the dump path, keep it off shared volumes, and delete dumps after the postmortem.
+
 ### Profiling — quick commands
 
 ```bash
