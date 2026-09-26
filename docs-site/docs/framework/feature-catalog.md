@@ -1096,6 +1096,13 @@ Next-generation AI agent pipeline for autonomous load test planning, generation,
 - **Capabilities:** Stakeholder-targeted summaries, technical deep-dives, executive briefs
 - **File:** `src/ai/agents/reporter-agent.ts`
 
+### AI-005: Flow Discovery
+
+- **Purpose:** Explore a web app toward a natural-language goal with Playwright and an AI decider (Claude or TypeSafe Jev), record a HAR and plan the k6 script
+- **Outputs:** `flow.har`, `flow.json` (schema `shared/schemas/discovery-flow.schema.json`), `flow.md`, `flow-plan.md` (endpoint sequence + correlation candidates)
+- **Guardrails:** host allowlist/blocklist, `--stop-at`, `--deny-text`, redaction before any model call, token budget, confidence threshold
+- **Files:** `bin/discover-flow.js`, `bin/discovery/*.js` — see [Flow Discovery](./ai/flow-discovery.md)
+
 ### Supporting AI Infrastructure
 
 | Component              | Purpose                                          | File                                        |

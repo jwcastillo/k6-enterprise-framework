@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "discovery-flow.schema.json",
+  "title": "k6 Enterprise Framework — Flow discovery result (flow.json)",
+  "description": "Written by bin/discover-flow.js. Contains no raw values: URLs and rationales are redacted, form values are referenced by --data key only. schemaVersion changes only on breaking changes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "goal", "decider", "startUrl", "dryRun", "startedAt", "durationMs", "stopReason", "outcome", "steps", "hostsSeen", "endpoints", "correlations", "guardrails", "tokensUsed"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "goal": { "type": "string" },
+    "decider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "model"],
+      "properties": { "name": { "type": "string" }, "model": { "type": "string" } }
+    },
+    "startUrl": { "type": "string" },
+    "dryRun": { "type": "boolean" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "stopReason": {
+      "type": "string",
+      "enum": ["goal-reached", "stop-at", "decider-stop", "low-confidence", "left-allowlist", "budget", "loop", "max-steps", "invalid-decision", "dry-run-complete"]
+    },
+    "stopDetail": { "type": "string" },
+    "outcome": { "type": "string", "enum": ["success", "safety-stop"] },
+    "tokensUsed": { "type": "integer", "minimum": 0 },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "action", "executed", "urlBefore", "urlAfter", "durationMs", "requests", "rationale", "confidence"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 },
+          "action": { "type": "string", "enum": ["click", "fill", "select", "check", "skip"] },
+          "executed": { "type": "boolean" },
+          "locator": { "type": "string" },
+          "valueKey": { "type": "string", "description": "--data key or synthetic:<desc>; never the value" },
+          "urlBefore": { "type": "string" },
+          "urlAfter": { "type": "string" },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "requests": { "type": "integer", "minimum": 0 },
+          "rationale": { "type": "string" },
+          "confidence": { "type": "number" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "hostsSeen": { "type": "array", "items": { "type": "string" } },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "path", "status"],
+        "properties": {
+          "method": { "type": "string" },
+          "path": { "type": "string", "description": "path template: numeric ids -> {id}, UUIDs -> {uuid}, opaque tokens -> {token}" },
+          "status": { "type": "integer" },
+          "mimeType": { "type": "string" }
+        }
+      }
+    },
+    "correlations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "source", "valueLength", "usedIn"],
+        "properties": {
+          "name": { "type": "string" },
+          "valueLength": { "type": "integer", "minimum": 1 },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "path", "kind", "selector"],
+            "properties": {
+              "method": { "type": "string" },
+              "path": { "type": "string" },
+              "kind": { "type": "string", "enum": ["json", "hidden-input"] },
+              "selector": { "type": "string" }
+            }
+          },
+          "usedIn": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method", "path", "where"],
+              "properties": {
+                "method": { "type": "string" },
+                "path": { "type": "string" },
+                "where": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowHosts", "blockHosts", "stopAt", "denyText", "maxSteps", "redaction", "deniedCandidates", "blockedRequests"],
+      "properties": {
+        "allowHosts": { "type": "array", "items": { "type": "string" } },
+        "blockHosts": { "type": "array", "items": { "type": "string" } },
+        "stopAt": { "type": "array", "items": { "type": "string" } },
+        "denyText": { "type": "string" },
+        "maxSteps": { "type": "integer", "minimum": 1 },
+        "redaction": { "const": true },
+        "deniedCandidates": { "type": "integer", "minimum": 0 },
+        "blockedRequests": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

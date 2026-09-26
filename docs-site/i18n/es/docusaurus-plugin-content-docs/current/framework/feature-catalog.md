@@ -1096,6 +1096,13 @@ Pipeline de agentes de IA de próxima generación para planificación, generaci�
 - **Capacidades:** Resúmenes dirigidos a stakeholders, profundizaciones técnicas, informes ejecutivos
 - **Archivo:** `src/ai/agents/reporter-agent.ts`
 
+### AI-005: Descubrimiento de Flujos
+
+- **Propósito:** Explorar una app web hacia un objetivo en lenguaje natural con Playwright y un decisor de IA (Claude o TypeSafe Jev), grabar un HAR y planificar el script k6
+- **Salidas:** `flow.har`, `flow.json` (schema `shared/schemas/discovery-flow.schema.json`), `flow.md`, `flow-plan.md` (secuencia de endpoints + candidatos a correlación)
+- **Salvaguardas:** allowlist/blocklist de hosts, `--stop-at`, `--deny-text`, redacción antes de cualquier llamada al modelo, presupuesto de tokens, umbral de confianza
+- **Archivos:** `bin/discover-flow.js`, `bin/discovery/*.js` — ver [Descubrimiento de Flujos](./ai/flow-discovery.md)
+
 ### Infraestructura de Soporte de IA
 
 | Componente             | Propósito                                            | Archivo                                     |

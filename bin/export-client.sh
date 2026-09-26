@@ -40,6 +40,7 @@ WITH_OBSERVABILITY="false"
 WITH_BINARY="false"
 WITH_CLAUDE="false"
 WITH_MCP="false"
+WITH_DISCOVERY="false"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -101,6 +102,7 @@ ${BOLD}── Capabilities ─────────────────�
   --with-binary        Include bin/build-binary.sh and Go embed modules
   --with-claude        Include .claude/ configuration (CLAUDE.md, settings, agent team + skills)
   --with-mcp           Include standalone MCP server
+  --with-discovery     Include bin/discover-flow.js (AI flow discovery → HAR → k6 plan)
   --full               Enable all capabilities above
 
 ${BOLD}── Examples ──────────────────────────────────────────────────────────────${RESET}
@@ -180,7 +182,8 @@ while [[ $# -gt 0 ]]; do
     --with-binary)       WITH_BINARY="true";        shift ;;
     --with-claude)       WITH_CLAUDE="true";        shift ;;
     --with-mcp)          WITH_MCP="true";           shift ;;
-    --full)              WITH_REPORTS="true"; WITH_OBSERVABILITY="true"; WITH_BINARY="true"; WITH_CLAUDE="true"; WITH_MCP="true"; shift ;;
+    --with-discovery)    WITH_DISCOVERY="true";     shift ;;
+    --full)              WITH_REPORTS="true"; WITH_OBSERVABILITY="true"; WITH_BINARY="true"; WITH_CLAUDE="true"; WITH_MCP="true"; WITH_DISCOVERY="true"; shift ;;
     --help|-h)         print_help; exit 0 ;;
     *)                 log_error "Unknown option: $1 (use --help for usage)"; exit 1 ;;
   esac
@@ -602,6 +605,15 @@ if [[ "${WITH_REPORTS}" == "true" ]]; then
   # Both generators require ./_help for --help output.
   cp "${ROOT_DIR}/bin/_help.js" "${OUTPUT_DIR}/framework/bin/_help.js" 2>/dev/null || true
   CAPABILITY_FILES=$((CAPABILITY_FILES + 3))
+fi
+
+if [[ "${WITH_DISCOVERY}" == "true" ]]; then
+  # Same relative layout as the monorepo: framework/bin/discovery/*.js resolve
+  # ../../shared/schemas/discovery-flow.schema.json (copied with shared/schemas above).
+  log_debug "Copying flow discovery..."
+  cp "${ROOT_DIR}/bin/discover-flow.js" "${ROOT_DIR}/bin/_help.js" "${OUTPUT_DIR}/framework/bin/"
+  cp -R "${ROOT_DIR}/bin/discovery" "${OUTPUT_DIR}/framework/bin/discovery"
+  CAPABILITY_FILES=$((CAPABILITY_FILES + 2 + $(find "${ROOT_DIR}/bin/discovery" -type f | wc -l | tr -d ' ')))
 fi
 
 if [[ "${WITH_OBSERVABILITY}" == "true" ]]; then
@@ -1613,7 +1625,8 @@ cat > "${OUTPUT_DIR}/export-manifest.json" << MANIFEST
     "observability": ${WITH_OBSERVABILITY},
     "binaryBuilder": ${WITH_BINARY},
     "claude": ${WITH_CLAUDE},
-    "mcp": ${WITH_MCP}
+    "mcp": ${WITH_MCP},
+    "discovery": ${WITH_DISCOVERY}
   }
 }
 MANIFEST
@@ -2274,7 +2287,7 @@ echo -e "  ${BOLD}Files:${RESET}     ${TOTAL_COPIED} (${CLIENT_FILE_COUNT} clien
 echo -e "  ${BOLD}Imports:${RESET}   ${REWRITE_COUNT} rewritten across ${REWRITE_FILES} files"
 echo -e "  ${BOLD}Scenarios:${RESET} ${SCENARIO_COUNT}"
 
-if [[ "${WITH_REPORTS}" == "true" || "${WITH_OBSERVABILITY}" == "true" || "${WITH_BINARY}" == "true" || "${WITH_CLAUDE}" == "true" || "${WITH_MCP}" == "true" ]]; then
+if [[ "${WITH_REPORTS}" == "true" || "${WITH_OBSERVABILITY}" == "true" || "${WITH_BINARY}" == "true" || "${WITH_CLAUDE}" == "true" || "${WITH_MCP}" == "true" || "${WITH_DISCOVERY}" == "true" ]]; then
   echo ""
   echo "  Capabilities:"
   [[ "${WITH_REPORTS}" == "true" ]] && echo "    bin/report.sh          HTML report generator"
@@ -2282,6 +2295,7 @@ if [[ "${WITH_REPORTS}" == "true" || "${WITH_OBSERVABILITY}" == "true" || "${WIT
   [[ "${WITH_BINARY}" == "true" ]] && echo "    bin/build-binary.sh    Standalone k6 binary builder"
   [[ "${WITH_CLAUDE}" == "true" ]] && echo "    .claude/               Claude Code configuration"
   [[ "${WITH_MCP}" == "true" ]] && echo "    mcp-server/            MCP server for AI integration"
+  [[ "${WITH_DISCOVERY}" == "true" ]] && echo "    framework/bin/discover-flow.js  AI flow discovery (needs playwright + ajv)"
 fi
 echo ""
 
