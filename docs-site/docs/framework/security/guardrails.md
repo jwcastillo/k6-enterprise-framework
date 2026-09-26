@@ -90,6 +90,11 @@ SkillSpector fails closed when coverage is partial, for example when a skill ref
 repo files that are not bundled with it, or when its bounded shell parser gives up on a
 JavaScript template literal.
 
+Limitations: some SkillSpector inspections have a wall-clock budget (0.25 s per artifact), so a
+heavily loaded runner can report an `AE1` "incomplete analysis" finding that a re-run does not.
+Baselines match on rule id, file and finding text, so an edit that changes a baselined line's
+text surfaces it again for review.
+
 ## Claude Code hooks
 
 `.claude/settings.json` wires `.claude/hooks/guardrails.js`:
