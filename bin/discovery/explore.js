@@ -80,7 +80,7 @@ function validateFlow(flow) {
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-const cell = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+const cell = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 function renderFlowMd(flow) {
   const lines = [
