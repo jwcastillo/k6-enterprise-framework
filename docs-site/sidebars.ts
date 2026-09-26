@@ -66,7 +66,12 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "AI & Integrations",
-      items: ["framework/ai/agents", "framework/ai/ai-config", "framework/ai/mcp-server"],
+      items: [
+        "framework/ai/agents",
+        "framework/ai/agent-team",
+        "framework/ai/ai-config",
+        "framework/ai/mcp-server",
+      ],
     },
     {
       type: "category",
