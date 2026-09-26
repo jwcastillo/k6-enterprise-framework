@@ -1664,12 +1664,12 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install k6
@@ -1699,7 +1699,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: k6-reports-${{ github.run_id }}
           path: reports/
@@ -1724,7 +1724,7 @@ variables:
   BASE_URL: "${BASE_URL}"
 
 .k6-image: &k6-image
-  image: node:20
+  image: node:24
   before_script:
     - apt-get update && apt-get install -y gnupg2
     - curl -s https://dl.k6.io/key.gpg | gpg --dearmor | tee /usr/share/keyrings/k6-archive-keyring.gpg
