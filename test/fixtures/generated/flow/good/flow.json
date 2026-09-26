@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "goal": "add an item to the cart",
+  "decider": { "name": "stub", "model": "none" },
+  "startUrl": "https://api.shop.test/",
+  "dryRun": false,
+  "startedAt": "2026-01-01T00:00:00Z",
+  "durationMs": 4200,
+  "stopReason": "goal-reached",
+  "outcome": "success",
+  "tokensUsed": 0,
+  "steps": [
+    {
+      "n": 1,
+      "action": "click",
+      "executed": true,
+      "locator": "role=button[name=\"Add to cart\"]",
+      "urlBefore": "https://api.shop.test/p/{id}",
+      "urlAfter": "https://api.shop.test/cart",
+      "durationMs": 800,
+      "requests": 3,
+      "rationale": "[redacted]",
+      "confidence": 0.9
+    }
+  ],
+  "hostsSeen": ["api.shop.test"],
+  "endpoints": [{ "method": "POST", "path": "/cart/items", "status": 201 }],
+  "correlations": [],
+  "guardrails": {
+    "allowHosts": ["api.shop.test"],
+    "blockHosts": [],
+    "stopAt": ["/checkout/pay"],
+    "denyText": "pay|confirm order",
+    "maxSteps": 20,
+    "redaction": true,
+    "deniedCandidates": 0,
+    "blockedRequests": 0
+  }
+}

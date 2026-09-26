@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "goal": "log in as jane.doe@mailhost.test",
+  "startUrl": "https://api.shop.test/",
+  "steps": [],
+  "hostsSeen": ["api.shop.test", "tracker.invalid"],
+  "headers": { "Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4eHh4eCJ9.c2lnbmF0dXJlc2ln" },
+  "guardrails": { "maxSteps": 0, "stopAt": [], "denyText": "" }
+}
