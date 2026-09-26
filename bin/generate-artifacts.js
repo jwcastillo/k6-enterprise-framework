@@ -93,7 +93,12 @@ function loadPipeline() {
   } catch (_) {
     process.env.TS_NODE_COMPILER_OPTIONS =
       process.env.TS_NODE_COMPILER_OPTIONS || JSON.stringify({ module: "commonjs" });
-    require("ts-node/register/transpile-only");
+    // Monorepo ships ts-node; exported standalone repos ship tsx instead.
+    try {
+      require("ts-node/register/transpile-only");
+    } catch (_) {
+      require("tsx/cjs");
+    }
     return require("../src/reporting/artifacts");
   }
 }
