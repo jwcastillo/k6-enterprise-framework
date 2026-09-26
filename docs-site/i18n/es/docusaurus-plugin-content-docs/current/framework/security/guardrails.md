@@ -88,6 +88,11 @@ Un score 0 sin hallazgos puede figurar como `CAUTION` y no `SAFE`: SkillSpector 
 cuando la cobertura es parcial, por ejemplo si un skill referencia archivos del repo que no
 vienen con él, o si su parser acotado de shell se rinde ante un template literal de JavaScript.
 
+Limitaciones: algunas inspecciones de SkillSpector tienen presupuesto de tiempo (0,25 s por
+artefacto), así que un runner muy cargado puede reportar un `AE1` de "análisis incompleto" que un
+re-run no reporta. Los baselines matchean por id de regla, archivo y texto del hallazgo: una
+edición que cambia el texto de una línea baselineada la vuelve a mostrar para revisión.
+
 ## Hooks de Claude Code
 
 `.claude/settings.json` conecta `.claude/hooks/guardrails.js`:
