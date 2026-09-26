@@ -44,7 +44,7 @@ describe("AnthropicProvider.estimateCost — pricing.json integration (AI-02)", 
     expect(r.model).toBe("claude-sonnet-4-6");
   });
 
-  it("explicit claude-opus-4-7 model returns opus rate (0.015 + 0.075)", () => {
+  it("explicit claude-opus-4-7 model returns opus rate (0.005 + 0.025)", () => {
     delete process.env.LLM_INPUT_USD_PER_1K;
     delete process.env.LLM_OUTPUT_USD_PER_1K;
     const p = new AnthropicProvider({ apiKey: "sk-x" });
@@ -52,7 +52,7 @@ describe("AnthropicProvider.estimateCost — pricing.json integration (AI-02)", 
       { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 },
       "claude-opus-4-7"
     );
-    expect(r.usd).toBeCloseTo(0.09, 10);
+    expect(r.usd).toBeCloseTo(0.03, 10);
     expect(r.model).toBe("claude-opus-4-7");
   });
 
