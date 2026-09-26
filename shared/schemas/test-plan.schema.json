@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "test-plan.schema.json",
+  "title": "k6 Enterprise Framework — AI Planner TestPlan",
+  "description": "Mirrors the TestPlan interface in src/types/ai.d.ts. Validated by bin/validate-generated.js --kind=testplan before a human accepts a plan.",
+  "type": "object",
+  "required": ["id", "name", "baseUrl", "endpoints", "testTypes", "trafficModel", "thresholds", "dataRequirements", "authConfig", "source", "metadata"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "baseUrl": { "type": "string", "pattern": "^https?://" },
+    "endpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["url", "method", "expectedStatus"],
+        "properties": {
+          "url": { "type": "string", "minLength": 1 },
+          "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+          "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+          "body": { "type": ["string", "object"] },
+          "expectedStatus": {
+            "oneOf": [
+              { "type": "integer", "minimum": 100, "maximum": 599 },
+              { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 100, "maximum": 599 } }
+            ]
+          },
+          "responseSchema": { "type": "object" },
+          "_description": { "type": "string" },
+          "requiresAuth": { "type": "boolean" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "testTypes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["load", "stress", "spike", "soak", "breakpoint"] }
+    },
+    "trafficModel": {
+      "type": "object",
+      "required": ["executor", "config", "estimatedDurationSeconds"],
+      "properties": {
+        "executor": { "type": "string", "minLength": 1 },
+        "config": { "type": "object" },
+        "estimatedDurationSeconds": { "type": "number", "minimum": 0 },
+        "thinkTimeSeconds": { "type": "number", "minimum": 0 }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+    },
+    "dataRequirements": {
+      "type": "object",
+      "properties": {
+        "csvFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["filename", "columns", "rowsNeeded"],
+            "properties": {
+              "filename": { "type": "string" },
+              "columns": { "type": "array", "items": { "type": "string" } },
+              "rowsNeeded": { "type": "integer", "minimum": 0 },
+              "_description": { "type": "string" }
+            }
+          }
+        },
+        "factories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "schema"],
+            "properties": {
+              "name": { "type": "string" },
+              "schema": { "type": "object" },
+              "_description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "authConfig": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["none", "bearer", "basic", "oauth2", "apikey", "custom"] },
+        "envVar": { "type": "string" },
+        "tokenUrl": { "type": "string" },
+        "scopes": { "type": "array", "items": { "type": "string" } },
+        "_description": { "type": "string" }
+      }
+    },
+    "source": { "enum": ["openapi", "text", "natural-language", "manual"] },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "profile": { "type": "string", "description": "Optional: shared/profiles/<profile>.json to run the plan with." },
+    "metadata": {
+      "type": "object",
+      "required": ["agentVersion", "generatedAt", "tokensUsed", "confidence"],
+      "properties": {
+        "agentVersion": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "tokensUsed": {
+          "type": "object",
+          "required": ["inputTokens", "outputTokens", "totalTokens", "estimatedCostUsd"],
+          "properties": {
+            "inputTokens": { "type": "integer", "minimum": 0 },
+            "outputTokens": { "type": "integer", "minimum": 0 },
+            "totalTokens": { "type": "integer", "minimum": 0 },
+            "estimatedCostUsd": { "type": "number", "minimum": 0 }
+          }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "correlationId": { "type": "string" },
+        "clientId": { "type": "string" }
+      }
+    }
+  }
+}

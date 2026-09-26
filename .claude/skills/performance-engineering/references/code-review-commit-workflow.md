@@ -409,10 +409,10 @@ Beyond per-commit approval, these are non-negotiable:
 ### Never do without explicit per-instance authorization
 
 - `git push` — even to a personal branch
-- `git push --force` (or `--force-with-lease`) — even if "safer"
+- Force-pushing (`git push` with a force or force-with-lease flag) — even if "safer"
 - `git merge` — onto any branch, especially main
 - `git rebase` — destructive history rewrite
-- `git reset --hard` — discards work
+- Hard resets (`git reset` in hard mode) — discards work
 - Creating a PR (via `gh pr create` or equivalent)
 - Tagging / releasing
 - Deploying anything

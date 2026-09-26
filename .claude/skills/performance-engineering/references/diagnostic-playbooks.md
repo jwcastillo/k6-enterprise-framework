@@ -15,8 +15,8 @@ For performance work, "the loop" usually means: **a way to reproduce the slow be
 ### Ways to construct a perf feedback loop — try in roughly this order
 
 1. **Failing benchmark** at whatever seam captures the regression — micro-benchmark (JMH, Go test `-bench`, pytest-benchmark), endpoint benchmark with `wrk2`/`hey`/`ab`, or a k6 `smoke` scenario asserting a threshold.
-2. **`curl`/HTTP script with timing** against a running dev server. `curl -w '@curl-format.txt'` produces `time_namelookup`, `time_connect`, `time_starttransfer`, `time_total` — enough to bisect TTFB issues.
-3. **Captured trace replay.** Save a real production request (with `tcpdump`, recording proxy, or HAR file) and replay it against a local instance. Eliminates network and load variability.
+2. **`curl`/HTTP script with timing** against a running dev server. `curl` with a `-w` timing format produces `time_namelookup`, `time_connect`, `time_starttransfer`, `time_total` — enough to bisect TTFB issues.
+3. **Captured trace replay.** Save a real production request (with `tcpdump`, recording proxy, or HAR file) and replay it against a local instance. Captures carry cookies, tokens and PII: redact them, keep them in a gitignored directory and delete them when done. Eliminates network and load variability.
 4. **Profiler-driven loop.** `pyspy record`, `async-profiler -d 10`, `perf record sleep 10` — produce a flame graph; iterate on the change; produce a new flame graph; diff. Can be < 30s per cycle on a developer machine.
 5. **Synthetic load generator at low concurrency.** k6 with 1-10 VUs or wrk2 at low RPS — enough to trigger the symptom without saturating the dev box.
 6. **Bisection harness.** If the regression appeared between two commits: automate "boot at commit X, run benchmark, record p95" so `git bisect run` can find the bad commit autonomously.

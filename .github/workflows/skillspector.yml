@@ -1,0 +1,52 @@
+name: SkillSpector
+
+# Static security scan of agent skills and the MCP server with NVIDIA SkillSpector.
+# Fails on any finding that is not in security/baselines/ (triaged in
+# security/skillspector-triage.md). No LLM here: semantic scans run locally via
+# bin/scan-skills.sh --semantic.
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.claude/**'
+      - 'mcp-server/**'
+      - 'security/**'
+      - 'bin/scan-skills.sh'
+      - '.github/workflows/skillspector.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: SkillSpector (static)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: astral-sh/setup-uv@v6
+
+      # Pinned to the commit the baselines were generated with (v2.12.0);
+      # bump deliberately and re-triage.
+      - name: Install SkillSpector
+        run: uv tool install "git+https://github.com/NVIDIA/skillspector.git@89e90872e2ec813bcb137bf6b3145c92e55811ae"
+
+      - name: Scan
+        id: scan
+        run: bin/scan-skills.sh --sarif-dir=skillspector-sarif
+
+      - name: Upload SARIF
+        if: always() && hashFiles('skillspector-sarif/skillspector.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: skillspector-sarif/skillspector.sarif
+          category: skillspector

@@ -34,6 +34,7 @@ const SCRIPTS: ReadonlyArray<string> = [
   "slo-report.js",
   "trend-analysis.js",
   "validate-config.js",
+  "validate-generated.js",
 ];
 
 const FLAGS: ReadonlyArray<string> = ["--help", "-h"];

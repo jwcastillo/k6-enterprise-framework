@@ -119,7 +119,7 @@ When the user hasn't decided on a tool, or when the default (k6) isn't the right
 **Use when:** raw HTTP latency benchmarking, comparing infra setups (kernel, NIC, JVM tunings), pre-production smoke at high RPS without infrastructure overhead.
 
 ```bash
-wrk2 -t 8 -c 100 -d 60s -R 1000 https://api.example.com/health
+wrk2 -t 8 -c 100 -d 60s -R 1000 "$BASE_URL/health"
 # 8 threads, 100 connections, 60s, 1000 RPS constant-arrival-rate
 ```
 
