@@ -79,14 +79,17 @@ if (!clientName || !testName) {
 const ROOT_DIR = path.resolve(__dirname, "..");
 const reportsBase = path.join(ROOT_DIR, "reports");
 
-// Find summary JSONs for this client/test — sorted by mtime (newest last)
-const clientDir = path.join(reportsBase, clientName, testName);
+// Find summary JSONs for this client/test — sorted by mtime (newest last).
+// run-test.sh writes reports/<client>/<scenario-slug>/summary-<YYYYMMDD-HHmmss>.json,
+// where the slug is the scenario path with "/" replaced by "_".
+const clientDir = path.join(reportsBase, clientName, testName.replace(/\//g, "_"));
+const SUMMARY_RE = /^summary-\d{8}-\d{6}\.json$|-summary\.json$/;
 let runs = [];
 
 if (fs.existsSync(clientDir)) {
   runs = fs
     .readdirSync(clientDir)
-    .filter((f) => f.endsWith("-summary.json"))
+    .filter((f) => SUMMARY_RE.test(f))
     .map((f) => {
       const fullPath = path.join(clientDir, f);
       const stat = fs.statSync(fullPath);
@@ -136,6 +139,13 @@ function extractValue(metrics, metricKey) {
       : null;
 }
 
+// Metric stat from either summary shape: handleSummary (nested under `values`)
+// or --summary-export (flat; rate metrics expose "value" instead of "rate").
+function stat(metric, key) {
+  const v = metric?.values ?? metric;
+  return v?.[key] ?? null;
+}
+
 function loadRun(runInfo) {
   try {
     const raw = JSON.parse(fs.readFileSync(runInfo.file, "utf-8"));
@@ -151,11 +161,11 @@ function loadRun(runInfo) {
         extractValue(metrics, "http_req_duration.p99") ??
         metrics.http_req_duration?.values?.["p(99)"] ??
         null,
-      avg: metrics.http_req_duration?.values?.avg ?? null,
-      errorRate: metrics.http_req_failed?.values?.rate ?? null,
-      checkRate: metrics.checks?.values?.rate ?? null,
-      reqCount: metrics.http_reqs?.values?.count ?? null,
-      reqRate: metrics.http_reqs?.values?.rate ?? null,
+      avg: stat(metrics.http_req_duration, "avg"),
+      errorRate: stat(metrics.http_req_failed, "rate") ?? stat(metrics.http_req_failed, "value"),
+      checkRate: stat(metrics.checks, "rate") ?? stat(metrics.checks, "value"),
+      reqCount: stat(metrics.http_reqs, "count"),
+      reqRate: stat(metrics.http_reqs, "rate"),
       primary: extractValue(metrics, primaryMetric) ?? null,
     };
   } catch {

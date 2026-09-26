@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 import {
   loadProfile,
   listProfiles,
@@ -347,5 +349,22 @@ describe("ProfileLoader", () => {
       expect(options.scenarios).toBeUndefined();
       expect(options.stages).toBeDefined();
     });
+  });
+});
+
+// The inline PROFILES (bundled for k6, the runtime source of truth) and
+// shared/profiles/*.json (copied into standalone exports) must generate the same
+// load. Descriptions and threshold sets are not compared.
+describe("shared/profiles/*.json load-shape parity", () => {
+  const dir = path.resolve(__dirname, "../../shared/profiles");
+  const names = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5));
+  const SHAPE_KEYS = ["executor", "stages", "rate", "timeUnit", "duration", "preAllocatedVUs", "maxVUs", "maxDuration"];
+  const shape = (p: Record<string, unknown>) =>
+    Object.fromEntries(SHAPE_KEYS.filter((k) => p[k] !== undefined).map((k) => [k, p[k]]));
+
+  it.each(names)("%s.json generates the same load as the inline profile", (name) => {
+    const json = JSON.parse(fs.readFileSync(path.join(dir, `${name}.json`), "utf-8"));
+    const inline = loadProfile(name as Parameters<typeof loadProfile>[0]) as unknown as Record<string, unknown>;
+    expect(shape(json)).toEqual(shape(inline));
   });
 });

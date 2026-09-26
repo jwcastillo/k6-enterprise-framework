@@ -492,6 +492,39 @@ describe("RBAC", () => {
       expect(result.allowed).toBe(false);
     });
 
+    it.each(["throughput-low", "throughput-medium"])(
+      "should allow developer to run steady %s profile",
+      (profile) => {
+        existsSyncSpy.mockReturnValue(true);
+        readFileSyncSpy.mockReturnValue(JSON.stringify(sampleRbacConfig));
+
+        expect(checkProfilePermission("dev-user", profile, makeClientContext()).allowed).toBe(true);
+      }
+    );
+
+    it.each(["throughput-high", "throughput-ramp"])(
+      "should deny developer from running elevated %s profile",
+      (profile) => {
+        existsSyncSpy.mockReturnValue(true);
+        readFileSyncSpy.mockReturnValue(JSON.stringify(sampleRbacConfig));
+
+        const result = checkProfilePermission("dev-user", profile, makeClientContext());
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("requires role");
+      }
+    );
+
+    it.each(["throughput-low", "throughput-medium", "throughput-high", "throughput-ramp"])(
+      "should allow lead and admin to run %s profile",
+      (profile) => {
+        existsSyncSpy.mockReturnValue(true);
+        readFileSyncSpy.mockReturnValue(JSON.stringify(sampleRbacConfig));
+
+        expect(checkProfilePermission("lead-user", profile, makeClientContext()).allowed).toBe(true);
+        expect(checkProfilePermission("admin-user", profile, makeClientContext()).allowed).toBe(true);
+      }
+    );
+
     it("should allow lead to run stress profile", () => {
       existsSyncSpy.mockReturnValue(true);
       readFileSyncSpy.mockReturnValue(JSON.stringify(sampleRbacConfig));
@@ -626,9 +659,15 @@ describe("RBAC", () => {
       expect(perms.admin.allowedProfiles).toContain("soak");
     });
 
-    it("should restrict developer to smoke, quick, load profiles", () => {
+    it("should restrict developer to steady expected-load profiles", () => {
       const perms = getRolePermissions();
-      expect(perms.developer.allowedProfiles).toEqual(["smoke", "quick", "load"]);
+      expect(perms.developer.allowedProfiles).toEqual([
+        "smoke",
+        "quick",
+        "load",
+        "throughput-low",
+        "throughput-medium",
+      ]);
     });
 
     it("should give admin more operations than lead", () => {

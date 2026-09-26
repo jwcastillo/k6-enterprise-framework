@@ -15,6 +15,7 @@
 import { execSync } from "child_process";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { pathToFileURL } from "url";
 import { FRAMEWORK_ROOT, sanitizeArg, mcpError, formatError } from "../utils/framework.js";
 
 // ---------------------------------------------------------------------------
@@ -81,9 +82,18 @@ export async function queryKnowledgeBase(
     if (client_id) validateNoInjection(client_id, "client_id");
 
     // Importar el manager en runtime para no requerir chromadb en arranque del MCP
-    const { KnowledgeBaseManager } = await import(
-      "../../../../../../k6-framework/src/ai/knowledge-base/knowledge-base.js" as string
-    ).catch(() => {
+    // Compiled output (tsc → dist/) first, then the TS source (needs a TS loader such as tsx).
+    const kbModule = [
+      join(FRAMEWORK_ROOT, "dist", "src", "ai", "knowledge-base", "knowledge-base.js"),
+      join(FRAMEWORK_ROOT, "src", "ai", "knowledge-base", "knowledge-base.ts"),
+    ].find((p) => existsSync(p));
+    if (!kbModule) {
+      throw mcpError(
+        "DEPENDENCY_ERROR",
+        "Modulo knowledge-base no disponible. Asegurate de compilar el framework."
+      );
+    }
+    const { KnowledgeBaseManager } = await import(pathToFileURL(kbModule).href).catch(() => {
       throw mcpError(
         "DEPENDENCY_ERROR",
         "Modulo knowledge-base no disponible. Asegurate de compilar el framework."
@@ -379,6 +389,39 @@ async function runTscCheck(
 // get_test_history — CHK-API-350
 // ---------------------------------------------------------------------------
 
+const SUMMARY_FILE_RE = /^summary-(\d{8}-\d{6})\.json$/;
+
+/**
+ * Read one value from a k6 metric in either summary shape: --summary-export
+ * (flat: { "p(95)": 1, value: 0 }) or handleSummary (nested under `values`).
+ */
+function metricValue(metric: unknown, key: string): number | undefined {
+  const m = metric as Record<string, unknown> | undefined;
+  if (!m) return undefined;
+  const v = m[key] ?? (m.values as Record<string, unknown> | undefined)?.[key];
+  return typeof v === "number" ? v : undefined;
+}
+
+function summaryMetrics(metrics: Record<string, unknown>): TestHistoryEntry["metrics"] {
+  // Rate metrics are "value" in --summary-export and "rate" under handleSummary values.
+  const errorRate =
+    metricValue(metrics.http_req_failed, "value") ?? metricValue(metrics.http_req_failed, "rate");
+  return {
+    p95Ms: metricValue(metrics.http_req_duration, "p(95)"),
+    errorRatePct: errorRate !== undefined ? errorRate * 100 : undefined,
+    rps: metricValue(metrics.http_reqs, "rate"),
+    vus: metricValue(metrics.vus_max, "max") ?? metricValue(metrics.vus_max, "value"),
+  };
+}
+
+function historyStatus(summary: Record<string, any>): "pass" | "fail" {
+  if (summary.status === "pass" || summary.status === "fail") return summary.status;
+  if (typeof summary.reportMeta?.exitCode === "number") {
+    return summary.reportMeta.exitCode === 0 ? "pass" : "fail";
+  }
+  return summary.thresholds_passed ? "pass" : "fail";
+}
+
 export interface GetTestHistoryParams {
   client: string;
   test?: string;
@@ -423,44 +466,33 @@ export function getTestHistory(params: GetTestHistoryParams): GetTestHistoryResu
 
     const entries: TestHistoryEntry[] = [];
 
-    // Recorrer estructura: reports/{client}/{test}/{timestamp}/
+    // bin/run-test.sh layout: reports/{client}/{scenario-slug}/summary-{YYYYMMDD-HHmmss}.json
+    // (scenario slug = scenario path with "/" replaced by "_").
     const testDirs = test
-      ? [join(reportsBase, sanitizeArg(test))]
+      ? [join(reportsBase, sanitizeArg(test).replace(/\//g, "_"))]
       : readdirSync(reportsBase).map((d) => join(reportsBase, d));
 
     for (const testDir of testDirs) {
       if (!existsSync(testDir)) continue;
       const testName = testDir.split("/").pop() ?? "";
 
-      const runDirs = readdirSync(testDir)
-        .filter((d) => /^\d{8}[-_]\d{6}/.test(d))
+      const summaries = readdirSync(testDir)
+        .filter((f) => SUMMARY_FILE_RE.test(f))
         .sort()
         .reverse()
         .slice(0, limit);
 
-      for (const runDir of runDirs) {
-        const summaryPath = join(testDir, runDir, "summary.json");
-        if (!existsSync(summaryPath)) continue;
-
+      for (const file of summaries) {
+        const runTs = file.match(SUMMARY_FILE_RE)![1];
         try {
-          const summary = JSON.parse(readFileSync(summaryPath, "utf-8"));
+          const summary = JSON.parse(readFileSync(join(testDir, file), "utf-8"));
           entries.push({
-            runId: `${client}/${testName}/${runDir}`,
+            runId: `${client}/${testName}/${runTs}`,
             client,
             test: testName,
-            timestamp: summary.timestamp ?? runDir,
-            status: summary.status ?? (summary.thresholds_passed ? "pass" : "fail"),
-            metrics: {
-              p95Ms: summary.metrics?.http_req_duration?.p95,
-              errorRatePct: summary.metrics?.http_req_failed?.rate
-                ? summary.metrics.http_req_failed.rate * 100
-                : undefined,
-              rps: summary.metrics?.http_reqs?.rate,
-              vus: summary.metrics?.vus_max?.value,
-              durationS: summary.state?.testRunDurationMs
-                ? summary.state.testRunDurationMs / 1000
-                : undefined,
-            },
+            timestamp: summary.reportMeta?.timestamp ?? summary.timestamp ?? runTs,
+            status: historyStatus(summary),
+            metrics: summaryMetrics(summary.metrics ?? {}),
           });
         } catch {
           // Skip malformed summaries
