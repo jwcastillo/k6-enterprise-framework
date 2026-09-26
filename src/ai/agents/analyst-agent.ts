@@ -38,7 +38,7 @@ import {
   type ObservabilityClients,
 } from "../observability/observability-clients.js";
 import { BudgetManager } from "../core/budget-manager.js";
-import { DEFAULT_AGENT_CONFIGS } from "../../types/ai.d";
+import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 
 // ---------------------------------------------------------------------------
 // Tipos de entrada del Analyst

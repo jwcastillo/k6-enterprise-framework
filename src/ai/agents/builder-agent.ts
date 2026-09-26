@@ -25,7 +25,7 @@ import type {
 } from "../../types/ai.d";
 import { KnowledgeBaseManager } from "../knowledge-base/knowledge-base.js";
 import { BudgetManager } from "../core/budget-manager.js";
-import { DEFAULT_AGENT_CONFIGS } from "../../types/ai.d";
+import { DEFAULT_AGENT_CONFIGS } from "../core/agent-defaults.js";
 
 // ---------------------------------------------------------------------------
 // Constantes del Builder
