@@ -15,7 +15,7 @@ const {
   createJevDecider,
 } = require("../../bin/discovery/deciders.js");
 const { templatePath, endpoints, correlations, hostMatches } = require("../../bin/discovery/har-analysis.js");
-const { resolveValue, assertNoPii, validateFlow } = require("../../bin/discovery/explore.js");
+const { resolveValue, assertNoPii, validateFlow, routeVerdict } = require("../../bin/discovery/explore.js");
 const { parseCli } = require("../../bin/discover-flow.js");
 
 const data = { plate: "TEST-001", email: "qa.user@example.com" };
@@ -55,6 +55,17 @@ describe("redaction", () => {
     expect(redact("other@example.org eyJhbGci.eyJzdWIi.sig order 12345", {})).toBe("<email> <jwt> order <n>");
     expect(redact("s=abcdef1234567890abcdef12", {})).toBe("s=<token>");
     expect(redact("http://localhost:8080/orders/12345", {})).toBe("http://localhost:8080/orders/<n>");
+  });
+
+  it("catches short opaque ids (10+ chars mixing letters and digits)", () => {
+    expect(redact("session a1b2c3d4e5 ok", {})).toBe("session <token> ok");
+    expect(redact("/orders/ORD9X7Q2LM4", {})).toBe("/orders/<token>");
+  });
+
+  it("leaves normal words, labels and short codes alone", () => {
+    for (const s of ["Continue to checkout", "Authentication required", "password-reset", "Step 2 of 3", "H264 video", "v2 beta", "Add to cart"]) {
+      expect(redact(s, {}), s).toBe(s);
+    }
   });
 
   it("masks form values: data keys by name, anything else by length", () => {
@@ -243,6 +254,29 @@ describe("output guards", () => {
 
   it("rejects a flow.json that does not match the published schema", () => {
     expect(() => validateFlow({ schemaVersion: 1 })).toThrow(/discovery-flow.schema.json/);
+  });
+});
+
+describe("host routing", () => {
+  const scope = { allowHosts: ["app.example.com"], blockHosts: ["*.ads.example.net"] };
+
+  it("by default gates main-frame navigation only", () => {
+    expect(routeVerdict("app.example.com", true, scope)).toBeNull();
+    expect(routeVerdict("other.example.org", true, scope)).toBe("off-allowlist");
+    expect(routeVerdict("cdn.example.org", false, scope)).toBeNull();
+    expect(routeVerdict("x.ads.example.net", false, scope)).toBe("blocked");
+  });
+
+  it("--strict-hosts aborts subresources off the allowlist too", () => {
+    const strict = { ...scope, strictHosts: true };
+    expect(routeVerdict("cdn.example.org", false, strict)).toBe("strict");
+    expect(routeVerdict("app.example.com", false, strict)).toBeNull();
+    expect(routeVerdict("other.example.org", true, strict)).toBe("off-allowlist");
+  });
+
+  it("parses --strict-hosts (off by default)", () => {
+    expect(parseCli(["--url=https://app.example.com", "--goal=g"]).strictHosts).toBe(false);
+    expect(parseCli(["--url=https://app.example.com", "--goal=g", "--strict-hosts"]).strictHosts).toBe(true);
   });
 });
 

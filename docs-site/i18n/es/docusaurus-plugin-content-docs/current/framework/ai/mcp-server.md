@@ -133,6 +133,10 @@ Ejecuta una prueba de carga k6 para un cliente.
 | `profile` | string | no | `smoke` | Perfil de carga: smoke, quick, load, stress |
 | `env` | string | no | `default` | Nombre del entorno de configuración |
 
+`run_test` no tiene timeout por defecto (las pruebas de carga pueden durar horas); definir
+`K6_MCP_CMD_TIMEOUT_MS` en el entorno del servidor para acotarlo. Cualquier otro comando que
+ejecute el servidor (scaffolding, validadores) se corta a los 300 s.
+
 **Devuelve:**
 
 ```json

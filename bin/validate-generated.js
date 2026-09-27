@@ -548,11 +548,12 @@ function jsonNumbers(value, out = new Set()) {
   return out;
 }
 
-// Numbers a report may carry without data backing: list ordinals, headings,
-// and small integers used in prose ("top 3", "2 endpoints").
-function isStructural(line, raw) {
-  if (/^\s*(#{1,6}\s|\d+[.)]\s)/.test(line) && line.trimStart().startsWith(raw)) return true;
-  return /^\d$/.test(raw);
+// Numbers a report may carry without data backing: a list marker ("1. ", "2) ") or
+// a heading's section number ("## 2.1 Latency"). Anything else — even a single digit
+// in prose ("errors on 7 endpoints") — must come from the data.
+function isStructural(line, raw, at) {
+  const marker = /^(\s*)(\d+)[.)]\s/.exec(line) || /^(\s*#{1,6}\s+)(\d+(?:\.\d+)*)[.)]?\s/.exec(line);
+  return !!marker && at === marker[1].length && raw === marker[2];
 }
 
 function validateReport(file, ctx) {
@@ -574,7 +575,7 @@ function validateReport(file, ctx) {
       for (const m of scrubbed.matchAll(/(?<![\w.])-?\d[\d,]*(?:\.\d+)?/g)) {
         const raw = m[0];
         const n = raw.replace(/,/g, "");
-        if (isStructural(line, raw)) continue;
+        if (isStructural(scrubbed, raw, m.index)) continue;
         const variants = [n, String(Number(n)), Number(n).toFixed(0), Number(n).toFixed(1), Number(n).toFixed(2)];
         if (!variants.some((v) => known.has(v))) unbacked.push({ raw, line: i + 1 });
       }

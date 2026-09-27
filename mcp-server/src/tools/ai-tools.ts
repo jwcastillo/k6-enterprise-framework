@@ -16,7 +16,7 @@ import { execSync } from "child_process";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
-import { FRAMEWORK_ROOT, sanitizeArg, mcpError, formatError } from "../utils/framework.js";
+import { FRAMEWORK_ROOT, sanitizeArg, validateClientName, mcpError, formatError } from "../utils/framework.js";
 
 // ---------------------------------------------------------------------------
 // Utilidades de validacion y seguridad
@@ -460,8 +460,13 @@ export function getTestHistory(params: GetTestHistoryParams): GetTestHistoryResu
     // Validar y sanitizar (CHK-SEC-110)
     validateNoInjection(client, "client");
     if (test) validateNoInjection(test, "test");
+    // Same rule as run_test: a client name is one path segment (no "..", no "/").
+    validateClientName(client);
+    if (test && test.split("/").includes("..")) {
+      throw mcpError("INVALID_PARAMS", `Invalid test path: '${test}'`);
+    }
 
-    const reportsBase = join(FRAMEWORK_ROOT, "reports", sanitizeArg(client));
+    const reportsBase = join(FRAMEWORK_ROOT, "reports", client);
 
     if (!existsSync(reportsBase)) {
       return { client, test, total: 0, entries: [] };

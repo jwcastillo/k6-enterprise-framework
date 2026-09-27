@@ -140,7 +140,7 @@ Con capabilities habilitadas, aparecen archivos adicionales:
 | `--with-reports` | `bin/report.sh` |
 | `--with-observability` | `bin/observability.sh`, `infrastructure/` |
 | `--with-binary` | `bin/build-binary.sh` |
-| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.json` (hooks de guardrails, declaración del plugin, allow list acotada), `.claude/hooks/guardrails.js`, `.claude/agents/`, `.claude/skills/`, `bin/validate-generated.js` + `bin/_secret-patterns.js` + `bin/_help.js` (gate de generación), `bin/scan-skills.sh`, `bin/agent-bash-guard.js`, `security/baselines/*.yaml`, `security/skillspector-triage.md` |
+| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.json` (hooks de guardrails, declaración del plugin, allow list acotada), `.claude/hooks/guardrails.js`, `.claude/agents/`, `.claude/skills/`, `bin/validate-generated.js` + `bin/_secret-patterns.js` + `bin/_help.js` (gate de generación), `bin/scan-skills.sh`, `bin/agent-bash-guard.js` + `bin/_shell-guard.js` (parser de shell compartido con el hook), `security/baselines/*.yaml`, `security/skillspector-triage.md` |
 
 `--with-claude` ya no escribe `.claude/settings.local.json` (un archivo por usuario). El
 `.claude/settings.json` exportado solo preaprueba los scripts wrapper (`./bin/run-test.sh`,

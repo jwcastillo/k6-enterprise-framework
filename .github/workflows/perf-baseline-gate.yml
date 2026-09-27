@@ -82,30 +82,30 @@ jobs:
       # ── 1. Checkout ─────────────────────────────────────────────────────────
       # fetch-depth: 0 so that a committed baseline from a prior commit is accessible
       - name: "Checkout repository"
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # ── 2. k6 runtime ───────────────────────────────────────────────────────
       - name: "Setup k6"
-        uses: grafana/setup-k6-action@v1
+        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
 
       # ── 3. Go toolchain ─────────────────────────────────────────────────────
       # Required for bin/compare.sh Tier B: go install github.com/jwcastillo/k6-compare@latest
       - name: "Setup Go"
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26.8"
 
       # ── 4. Node.js + pnpm ───────────────────────────────────────────────────
       # pnpm is the only supported package manager for this repo (CLAUDE.md constraint)
       - name: "Setup pnpm"
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: latest
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: "pnpm"
@@ -167,7 +167,7 @@ jobs:
       # ── 6. Upload artifacts ─────────────────────────────────────────────────
       - name: "Upload run artifacts"
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: "baseline-gate-${{ github.event.inputs.client || inputs.client || '_reference' }}-${{ github.run_id }}"
           path: |

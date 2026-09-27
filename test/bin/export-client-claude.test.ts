@@ -29,7 +29,7 @@ describe("bin/export-client.sh --with-claude (_reference)", () => {
   afterAll(() => fs.rmSync(out, { recursive: true, force: true }));
 
   it("exports the generation gate and the skill scan next to the runner", () => {
-    for (const f of ["validate-generated.js", "_secret-patterns.js", "_help.js", "scan-skills.sh", "agent-bash-guard.js"]) {
+    for (const f of ["validate-generated.js", "_secret-patterns.js", "_help.js", "_shell-guard.js", "scan-skills.sh", "agent-bash-guard.js"]) {
       expect(exists(`bin/${f}`), f).toBe(true);
     }
     const baselines = fs.readdirSync(path.join(ROOT, "security/baselines")).filter((f) => f.endsWith(".yaml"));
@@ -87,6 +87,15 @@ describe("bin/export-client.sh --with-claude (_reference)", () => {
     });
     expect(res.status).toBe(2);
     expect(res.stderr).not.toContain("--client");
+  });
+
+  it("the exported bash hook parses commands with the exported shell guard", () => {
+    const res = spawnSync(process.execPath, [path.join(out, ".claude/hooks/guardrails.js"), "bash"], {
+      input: JSON.stringify({ tool_input: { command: `bash -c "${["k6", "run", "x.js"].join(" ")}"` } }),
+      encoding: "utf8",
+    });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain("Run k6 through the runner");
   });
 
   it("CLAUDE.md and README mention the gate and the hooks", () => {
