@@ -260,6 +260,24 @@ describe("validate-generated --kind=report", () => {
     expect(new Set(failed(result))).toEqual(new Set(["numbers", "pii", "deny-terms"]));
     expect(JSON.stringify(result).toLowerCase()).not.toContain("acme");
   });
+
+  // Review finding: every single digit used to be exempt, anywhere in the text.
+  it("exempts list markers and heading numbers only, not single digits in prose", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vg-report-"));
+    try {
+      fs.writeFileSync(path.join(dir, "r.json"), JSON.stringify({ p95: 412 }));
+      fs.writeFileSync(path.join(dir, "ok.md"), "## 2.1 Latency\n\n1. p95 was 412 ms\n2) stable\n");
+      fs.writeFileSync(path.join(dir, "bad.md"), "## Latency\n\n- p95 was 412 ms, errors on 7 endpoints\n");
+      const data = `--data=${path.join(dir, "r.json")}`;
+      expect(failed(gate(["--kind=report", data, path.join(dir, "ok.md")]).result)).toEqual([]);
+      const bad = gate(["--kind=report", data, path.join(dir, "bad.md")]).result;
+      expect(bad.checks.filter((c) => c.id === "numbers" && c.status === "fail").map((c) => c.message)).toEqual([
+        "number '7' is not in r.json",
+      ]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("validate-generated usage", () => {

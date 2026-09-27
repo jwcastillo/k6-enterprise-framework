@@ -55,6 +55,28 @@ describe("mcp-server tools (COV-07)", () => {
       expect(cmdArg).toContain("smoke");
     });
 
+    it("gives run_test its own timeout (none by default, K6_MCP_CMD_TIMEOUT_MS overrides)", () => {
+      const prev = process.env.K6_MCP_CMD_TIMEOUT_MS;
+      try {
+        delete process.env.K6_MCP_CMD_TIMEOUT_MS;
+        runTest({ client: "myclient", test: "api/a" });
+        process.env.K6_MCP_CMD_TIMEOUT_MS = "7200000";
+        runTest({ client: "myclient", test: "api/a" });
+      } finally {
+        if (prev === undefined) delete process.env.K6_MCP_CMD_TIMEOUT_MS;
+        else process.env.K6_MCP_CMD_TIMEOUT_MS = prev;
+      }
+      const calls = (framework.runCliCommand as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls[0][2]).toBeNull();
+      expect(calls[1][2]).toBe(7_200_000);
+    });
+
+    it("releases the lock when the command times out", () => {
+      (framework.runCliCommand as ReturnType<typeof vi.fn>).mockReturnValueOnce({ stdout: "", stderr: "ETIMEDOUT", exitCode: 1 });
+      expect(runTest({ client: "myclient", test: "api/t" }).status).toBe("fail");
+      expect(runTest({ client: "myclient", test: "api/t" }).status).toBe("pass");
+    });
+
     it("returns fail status when underlying command exits non-zero", () => {
       (framework.runCliCommand as ReturnType<typeof vi.fn>).mockReturnValueOnce({
         stdout: "threshold violation",

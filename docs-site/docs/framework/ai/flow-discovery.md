@@ -42,8 +42,8 @@ keys (`query`, `email`), never the values.
    name, index; form values masked as `{{key}}` or `<n chars>`). Iframes and shadow roots
    are not entered, but their count is reported so the decider knows content is missing.
 2. **Filter** — elements matching `--deny-text` are removed before the decider sees them.
-3. **Redact** — `--data` values become `{{key}}`; emails, JWTs, opaque tokens and runs of
-   4+ digits are replaced. Cookies and headers are never part of the observation.
+3. **Redact** — `--data` values become `{{key}}`; emails, JWTs, opaque ids (10+
+   characters mixing letters and digits) and runs of 4+ digits are replaced. Cookies and headers are never part of the observation.
 4. **Decide** — the decider answers `click | fill | select | check | navigate_done | stop`,
    a candidate index, a value key and a rationale.
 5. **Guard** — invalid index, unknown value key or confidence below `--min-confidence`
@@ -76,7 +76,8 @@ Tests inject a scripted decider instead; no key is needed to run them.
 | `--decider` | `claude` | `claude` or `jev`. |
 | `--data` | — | JSON object of named test values. |
 | `--max-steps` | `30` | Maximum actions. |
-| `--allow-hosts` | — | Extra hosts main-frame navigation may reach; anything else is aborted and stops the run. |
+| `--allow-hosts` | — | Extra hosts main-frame navigation may reach; a navigation anywhere else is aborted and stops the run. By default this gates **main-frame navigation only**: subresources (XHR/fetch, scripts, images, iframes) to other hosts still load. |
+| `--strict-hosts` | off | Abort **every** request (subresources too) to a host outside the start host and `--allow-hosts`. Use it when third-party calls must not leave the browser; pages that depend on a CDN may break. |
 | `--block-hosts` | — | Hosts (`*.x.com` wildcards) whose requests are aborted, for every page of the context. |
 | `--stop-at` | — | Repeatable regex; when the URL matches, record and stop. |
 | `--deny-text` | pay, buy, purchase, checkout, confirm/place order, delete, … | Elements whose name or text matches are never offered. |

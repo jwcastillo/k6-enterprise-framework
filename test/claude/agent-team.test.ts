@@ -117,6 +117,102 @@ describe("agent-bash-guard", () => {
     expect(decide("operator", cmd).decision).toBe("allow");
   });
 
+  // Review findings: pnpm forwards trailing args, and quoting/indirection bypassed the lists.
+  it.each([
+    "pnpm lint --fix",
+    "pnpm test -u",
+    "pnpm test --update",
+    "pnpm typecheck --watch",
+    "pnpm lint -- --fix",
+    "skillspector scan .claude/agents --recursive",
+    "bin/scan-skills.sh --semantic",
+    "git diff --output=x.patch",
+    `bash -c "pnpm lint"`,
+    "env pnpm lint",
+    "pnpm $CMD",
+  ])("reviewer denies %s", (cmd) => {
+    expect(decide("reviewer", cmd).decision).toBe("deny");
+  });
+
+  it("reviewer allows pnpm test with a path filter", () => {
+    expect(decide("reviewer", "pnpm test test/bin/junit.test.ts").decision).toBe("allow");
+    expect(decide("reviewer", "pnpm typecheck").decision).toBe("allow");
+  });
+
+  it.each([
+    `bash -c "k6 run app.js"`,
+    `sh -c 'k6 run app.js'`,
+    `V=K6_ALLOW_PROD_LOAD; export "$V=true"; ./bin/run-test.sh --scenario=api/x --profile=smoke`,
+    "V=--unsafe; ./bin/run-test.sh --scenario=api/x --profile=smoke $V",
+    "rm -rf reports",
+    "curl https://example.com",
+    "node -e 1",
+    "cat .env",
+    "cat reports/../.env",
+    "./bin/run-test.sh --scenario=api/x --profile=smoke > out.txt",
+    `echo "./bin/run-test.sh --scenario=x" | bash`,
+    `./bin/run-test.sh --scenario="unterminated`,
+  ])("operator denies %s", (cmd) => {
+    expect(decide("operator", cmd).decision).toBe("deny");
+  });
+
+  it.each([
+    "./bin/run-test.sh --scenario=api/x --profile stress",
+    "node bin/find-capacity.js --client=c --scenario=api/x",
+    "helm upgrade k6 infrastructure/k8s/helm/k6-enterprise",
+    "kubectl apply -f x.yaml",
+  ])("operator asks the human for %s", (cmd) => {
+    expect(decide("operator", cmd).decision).toBe("ask");
+  });
+
+  it.each([
+    "/abs/repo/bin/run-test.sh --scenario=api/x --profile=smoke 2>&1",
+    "helm template k6 infrastructure/k8s/helm/k6-enterprise",
+    "kubectl logs -n k6-tests job/x",
+    "git log --oneline -5",
+    "ls reports/",
+    "cat reports/run/summary.json | head -20",
+  ])("operator allows %s", (cmd) => {
+    expect(decide("operator", cmd).decision).toBe("allow");
+  });
+
+  // Adversarial review: the runners keep the LAST --profile/--env; helm/kubectl flags that run programs.
+  it.each([
+    "./bin/run-test.sh --scenario=api/x --profile=smoke --profile=stress",
+    "./bin/run-test.sh --scenario=api/x --profile smoke --profile=stress",
+    "./bin/run-test.sh --scenario=api/x --env=staging --env=production",
+    "./bin/run-test.sh --scenario=api/x --env=preprod",
+    "./bin/run-test.sh --scenario=api/x --env=live",
+    "helm template k6 chart --kubeconfig=/tmp/k",
+    "kubectl get --raw /api",
+    "kubectl --kubeconfig /tmp/k get pods",
+  ])("operator asks the human for %s", (cmd) => {
+    expect(decide("operator", cmd).decision).toBe("ask");
+  });
+
+  it("operator never allows helm --post-renderer or package scripts", () => {
+    expect(decide("operator", "helm template k6 chart --post-renderer=./r.sh").decision).toBe("deny");
+    expect(decide("operator", "helm template k6 chart --post-renderer ./r.sh").decision).toBe("deny");
+    expect(decide("operator", "pnpm test:reference").decision).toBe("deny");
+  });
+
+  it.each(["git log --exec-path=/tmp/x", "git log -c", "git show --config-env=core.pager=X HEAD", "git diff --textconv"])(
+    "operator and reviewer deny git exec/config flags: %s",
+    (cmd) => {
+      expect(decide("operator", cmd).decision).toBe("deny");
+      expect(decide("reviewer", cmd).decision).toBe("deny");
+    }
+  );
+
+  it("operator allows a known non-production environment given once", () => {
+    expect(decide("operator", "./bin/run-test.sh --scenario=api/x --profile=smoke --env=staging").decision).toBe("allow");
+  });
+
+  it("reviewer still allows package scripts that resolve cleanly", () => {
+    expect(decide("reviewer", "pnpm test").decision).toBe("allow");
+    expect(decide("reviewer", "pnpm lint").decision).toBe("allow");
+  });
+
   it("discoverer asks before every discovery run", () => {
     expect(decide("discoverer", "node bin/discover-flow.js --url=https://staging.example.com").decision).toBe("ask");
     expect(decide("discoverer", "node bin/discover-flow.js --help").decision).toBe("allow");

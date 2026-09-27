@@ -138,12 +138,79 @@ edición que cambia el texto de una línea baselineada la vuelve a mostrar para 
 | --- | --- | --- |
 | PreToolUse | `Bash` | `k6 run` / `k6 cloud` directos — usar `./bin/run-test.sh`, que aplica target-guard, gates de escenario y reportes |
 | PreToolUse | `Bash` | `--unsafe` o `K6_ALLOW_PROD_LOAD=true`, salvo que el humano haya iniciado Claude Code con `K6_AGENT_ALLOW_UNSAFE=1` exportado en su propia shell |
-| PreToolUse | `Write\|Edit\|MultiEdit` | `*.har` y `replay-*.json` escritos en un path que git no ignora (usar `data/` o `reports/`) |
+| PreToolUse | `Bash` | indirección que podría producir cualquiera de los dos anteriores: un nombre de comando desde una variable o sustitución, variables en los argumentos de `k6` o de los runners, una variable con un valor protegido (`V=--unsafe`), `export "$V=..."`, `xargs` manejando el runner, una shell que lee su script de un pipe, `source` en la misma línea que una corrida |
+| PreToolUse | `Write\|Edit\|MultiEdit` | tráfico grabado y estado del navegador — `*.har`, `*.har.json`, `*.har.gz`, `replay-*.json`, trazas de Playwright (`trace.zip`, `*.trace.zip`) y estado de storage/auth (`storage-state*.json`, `storageState*.json`, `*auth*state*.json`) — escritos en un path que git no ignora, o donde `git check-ignore` no puede responder (usar `data/` o `reports/`) |
 | PostToolUse | `Write\|Edit\|MultiEdit` | nada — corre `validate-generated.js --kind=scenario --no-build` sobre `scenarios/**` y `clients/*/scenarios/**` y devuelve los fallos al agente |
 
-Los hooks fallan cerrado ante una violación detectada (exit `2`, el motivo vuelve al agente)
-y fallan abierto ante sus propios errores, así un hook roto nunca traba una sesión. Matchean
-el texto del comando, así que un mensaje que solo cita `k6 run` también se bloquea — reformularlo.
+El hook de Bash parsea el comando con `bin/_shell-guard.js` (sin dependencias, así funciona
+antes de `pnpm install`) y decide sobre las palabras que bash ejecutaría: se quitan las
+comillas, y `sh|bash|zsh -c`, `eval`, `env -S`, `$(...)`, backticks y heredocs que alimentan
+una shell también se parsean como comandos. Así se detecta `bash -c "..."` o un `k6" "run`
+partido, mientras que un mensaje de commit o un `echo` que solo cita `k6 run` pasa. Una
+indirección denegada dice "indirection not allowed; write the command literally".
+
+También sigue lo que un comando delega:
+
+- Scripts de paquete: `pnpm <script>`, `pnpm run`, `npm run`/`npm test`, `yarn <script>`
+  se resuelven desde el `package.json` más cercano (hooks pre/post incluidos) y se parsean.
+  Un script que no se puede resolver, o una corrida sobre todo el workspace (`-r`,
+  `--filter`), se deniega.
+- Archivos de script: `bash|sh|zsh archivo`, `source`/`.` y `./archivo.sh` se leen (hasta
+  256 KiB, 16 archivos por comando) y se parsean; un archivo inexistente o imposible de
+  parsear se deniega. Los runners y las herramientas propias de `bin/` del repo se revisan
+  por sus argumentos, sin releerlos.
+- `corepack`, `bun run`/`bun <script>` y `bunx` se resuelven como pnpm/npx. Para `make`,
+  `just` y `task` se lee el archivo de tareas y la llamada se deniega cuando el archivo
+  menciona k6, los runners o los interruptores unsafe/prod-load, o cuando no se puede leer.
+- `cd`/`pushd`/`env -C` con un destino literal agregan ese directorio a los usados para
+  resolver scripts (el anterior se mantiene, por si el `cd` corre en una subshell o
+  falla); un destino imposible de conocer (una variable, `-`, `~usuario`, un glob) hace
+  que toda resolución de scripts posterior se deniegue.
+- Escribir y ejecutar: una línea que escribe un archivo (`>`, `tee`, `cp`, `mv`,
+  `sed -i`, `dd of=`, heredoc a un archivo, ...) y ejecuta ese archivo, un script junto a
+  él, o un `package.json`/Makefile que reescribió se deniega, porque el hook lee los
+  archivos antes de que la línea corra. `openssl -out`, `sponge`, `split`/`csplit` (su
+  prefijo de salida) y `exec N>archivo` cuentan como escritores. Los escritores con
+  destino desconocido (`curl -o`, `git checkout`, `awk`, `node -e`, un destino en
+  variable, ...) cuentan como que escriben cualquier cosa, salvo frente a los runners y
+  las herramientas de `bin/` del repo (nunca se leen), que solo se marcan con una
+  escritura en su propio path: `git pull && ./bin/run-test.sh …` está permitido.
+- Una asignación de entorno (`VAR=… cmd`, `env VAR=…`, `export VAR=…`) anterior en la
+  línea a k6, un runner, un script de paquete o un archivo de script se deniega:
+  `PATH=…`, `NODE_OPTIONS=…` o `npm_config_script_shell=…` cambiarían lo que se ejecuta.
+  Los nombres inertes están permitidos: `NODE_ENV`, `CI`, `DEBUG`, `TZ`, `LANG`, `LC_*`,
+  `FORCE_COLOR`, `NO_COLOR`, `TERM`, `COLUMNS` y `K6_*`, salvo `K6_ALLOW_PROD_LOAD` y los
+  `K6_*` que eligen binario, imagen, extensión, CLI de reportes u origen de secretos o
+  saltean chequeos (`K6_BINARY*`, `K6_SKIP_*`, ...). Las asignaciones antes de otros
+  comandos están permitidas.
+- k6, el nombre de un runner o los interruptores unsafe/prod-load dentro de los
+  **argumentos** de otro programa se deniegan: `docker run … k6`,
+  `kubectl run|exec … -- k6`, `ssh host k6 …`, `vim -c '!k6 …'`,
+  `awk 'BEGIN{system("k6 …")}'`, `python3 -c`, `perl -e`, `node -e` y similares. Las
+  herramientas de datos quedan exentas (echo, printf, grep, rg, sed, git, gh, cat, ls, jq,
+  shellcheck, ...), así los mensajes de commit y los patrones de búsqueda que mencionan
+  k6 siguen pasando.
+- `watch`, `find -exec`, configuración de git que ejecuta programas (`-c core.pager=…`,
+  `alias.*`, `--exec-path=`), variables como `BASH_ENV`/`GIT_PAGER`, nombres de comando
+  con caracteres de glob o llaves y `helm --post-renderer` cuentan como indirección.
+
+Los hooks fallan cerrado ante una violación detectada (exit `2`, el motivo vuelve al
+agente), ante **cualquier** comando que no pueden parsear ("could not parse command; write
+it in a simpler form" — escapes como `$'\x..'` pueden esconder una palabra protegida de
+una búsqueda de texto, así que no hay respaldo basado en texto), y cuando falta
+`bin/_shell-guard.js`. Las asignaciones de arrays, las definiciones de funciones y
+`case … esac` se parsean. Fallan abierto ante sus propios errores internos, así un hook
+roto nunca traba una sesión.
+
+El hook es defensa en profundidad de mejor esfuerzo, no un sandbox. Los intérpretes y los
+lanzadores remotos o de contenedores solo se detectan cuando el token de k6/runner aparece
+literalmente en sus argumentos; los binarios renombrados, los payloads codificados o
+calculados dentro del código de un intérprete y los archivos descargados en una llamada
+de herramienta y ejecutados en otra no se ven, y un agente decidido con acceso a la shell
+puede encontrar otros caminos. El límite
+de aplicación es el chequeo de aprobación propio del runner (agregado en un cambio
+aparte): el hook existe para atrapar errores y evasiones obvias temprano, con un mensaje
+claro.
 
 ## Para repos de clientes
 

@@ -139,12 +139,71 @@ text surfaces it again for review.
 | --- | --- | --- |
 | PreToolUse | `Bash` | `k6 run` / `k6 cloud` called directly — use `./bin/run-test.sh`, which applies target-guard, scenario gates and reports |
 | PreToolUse | `Bash` | `--unsafe` or `K6_ALLOW_PROD_LOAD=true`, unless the human started Claude Code with `K6_AGENT_ALLOW_UNSAFE=1` exported in their own shell |
-| PreToolUse | `Write\|Edit\|MultiEdit` | `*.har` and `replay-*.json` written to a path git does not ignore (use `data/` or `reports/`) |
+| PreToolUse | `Bash` | indirection that could produce either of the above: a command name from a variable or substitution, variables in the arguments of `k6` or the runners, a variable holding a guarded value (`V=--unsafe`), `export "$V=..."`, `xargs` driving the runner, a shell reading its script from a pipe, `source` on the same line as a run |
+| PreToolUse | `Write\|Edit\|MultiEdit` | recorded traffic and browser state — `*.har`, `*.har.json`, `*.har.gz`, `replay-*.json`, Playwright traces (`trace.zip`, `*.trace.zip`) and storage/auth state (`storage-state*.json`, `storageState*.json`, `*auth*state*.json`) — written to a path git does not ignore, or where `git check-ignore` cannot answer (use `data/` or `reports/`) |
 | PostToolUse | `Write\|Edit\|MultiEdit` | nothing — runs `validate-generated.js --kind=scenario --no-build` on `scenarios/**` and `clients/*/scenarios/**` and reports failures back to the agent |
 
-Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent) and
-fail open on their own errors, so a broken hook never wedges a session. They match the
-command text, so a message that merely quotes `k6 run` is blocked too — rephrase it.
+The Bash hook parses the command with `bin/_shell-guard.js` (no dependencies, so it works
+before `pnpm install`) and decides on the words bash would run: quotes are removed, and
+`sh|bash|zsh -c`, `eval`, `env -S`, `$(...)`, backticks and heredocs fed to a shell are
+parsed as commands too. So `bash -c "..."` or a split `k6" "run` is caught, while a commit
+message or `echo` that only quotes `k6 run` passes. A denied indirection says
+"indirection not allowed; write the command literally".
+
+It also follows what a command hands off to:
+
+- Package scripts: `pnpm <script>`, `pnpm run`, `npm run`/`npm test`, `yarn <script>`
+  are resolved from the nearest `package.json` (pre/post hooks included) and parsed.
+  A script that cannot be resolved, or a workspace-wide run (`-r`, `--filter`), is denied.
+- Script files: `bash|sh|zsh file`, `source`/`.` and `./file.sh` are read (up to 256 KiB,
+  16 files per command) and parsed; a missing or unparseable file is denied. The runners
+  and the repo's own `bin/` tooling are checked by their arguments, not re-read.
+- `corepack`, `bun run`/`bun <script>` and `bunx` are resolved like pnpm/npx. For
+  `make`, `just` and `task` the task file is read and the call is denied when the file
+  mentions k6, the runners or the unsafe/prod-load switches, or cannot be read.
+- `cd`/`pushd`/`env -C` with a literal target add that directory to the ones scripts are
+  resolved from (the previous one stays, in case the `cd` runs in a subshell or fails);
+  a target that cannot be known (a variable, `-`, `~user`, a glob) makes any later script
+  resolution a denial.
+- Write-then-run: a line that writes a file (`>`, `tee`, `cp`, `mv`, `sed -i`, `dd of=`,
+  heredoc into a file, ...) and runs that file, a script next to it, or a
+  `package.json`/Makefile it rewrote is denied, because the hook reads files before the
+  line runs. `openssl -out`, `sponge`, `split`/`csplit` (their output prefix) and
+  `exec N>file` count as writers. Writers whose target is unknown (`curl -o`,
+  `git checkout`, `awk`, `node -e`, a variable target, ...) count as writing anything,
+  except against the runners and the repo's `bin/` tooling (never content-read), which
+  are only tainted by a write to their own path: `git pull && ./bin/run-test.sh …` is
+  fine.
+- An environment assignment (`VAR=… cmd`, `env VAR=…`, `export VAR=…`) earlier on the
+  line than k6, a runner, a package script or a script file is denied: `PATH=…`,
+  `NODE_OPTIONS=…` or `npm_config_script_shell=…` would change what runs. Inert names are
+  allowed: `NODE_ENV`, `CI`, `DEBUG`, `TZ`, `LANG`, `LC_*`, `FORCE_COLOR`, `NO_COLOR`,
+  `TERM`, `COLUMNS` and `K6_*`, except `K6_ALLOW_PROD_LOAD` and the `K6_*` that pick a
+  binary, image, extension, report CLI or secret source or skip checks
+  (`K6_BINARY*`, `K6_SKIP_*`, ...). Assignments before other commands are fine.
+- k6, a runner name or the unsafe/prod-load switches inside the **arguments** of another
+  program are denied: `docker run … k6`, `kubectl run|exec … -- k6`, `ssh host k6 …`,
+  `vim -c '!k6 …'`, `awk 'BEGIN{system("k6 …")}'`, `python3 -c`, `perl -e`, `node -e` and
+  the like. Data tools are exempt (echo, printf, grep, rg, sed, git, gh, cat, ls, jq,
+  shellcheck, ...), so commit messages and search patterns that mention k6 still pass.
+- `watch`, `find -exec`, git config that runs programs (`-c core.pager=…`, `alias.*`,
+  `--exec-path=`), variables such as `BASH_ENV`/`GIT_PAGER`, command names with glob or
+  brace characters and `helm --post-renderer` count as indirection.
+
+Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent),
+on **any** command they cannot parse ("could not parse command; write it in a simpler
+form" — escapes such as `$'\x..'` can hide a guarded word from a text match, so there is
+no text-based fallback), and when `bin/_shell-guard.js` is missing. Array assignments,
+function definitions and `case … esac` parse. Hooks fail open on their own internal
+errors, so a broken hook never wedges a session.
+
+The hook is best-effort defense in depth, not a sandbox. Interpreters and remote or
+container launchers are only caught when the k6/runner token appears literally in their
+arguments; renamed binaries, encoded or computed payloads inside interpreter code, and
+files fetched in one tool call and run in another are not seen, and a determined agent
+with shell access can find other paths. The enforcement boundary is the runner's own
+approval check (added in a separate change): the hook exists to catch mistakes and
+obvious bypasses early, with a clear message.
 
 ## For client repos
 

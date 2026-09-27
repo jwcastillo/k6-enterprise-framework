@@ -936,9 +936,16 @@ GITIGNORE
 log_success "Generated .gitignore"
 
 # ── .tool-versions (asdf) ────────────────────────────────────────────────────
-cat > "${OUTPUT_DIR}/.tool-versions" << 'TOOLVERSIONS'
-nodejs lts
-TOOLVERSIONS
+# asdf needs exact versions ("lts" is not one): mirror the monorepo's pins. golang
+# only matters for the binary builder.
+TOOL_RE='^(nodejs|pnpm)[[:space:]]'
+[[ "${WITH_BINARY}" == "true" ]] && TOOL_RE='^(nodejs|pnpm|golang)[[:space:]]'
+if [[ -f "${ROOT_DIR}/.tool-versions" ]]; then
+  grep -E "${TOOL_RE}" "${ROOT_DIR}/.tool-versions" > "${OUTPUT_DIR}/.tool-versions" || true
+fi
+if ! grep -qE '^nodejs[[:space:]]' "${OUTPUT_DIR}/.tool-versions" 2>/dev/null; then
+  echo "nodejs $(node -v | sed 's/^v//')" >> "${OUTPUT_DIR}/.tool-versions"
+fi
 log_success "Generated .tool-versions"
 
 # ── T-308: bin/run-test.sh standalone ────────────────────────────────────────
@@ -1514,7 +1521,7 @@ if [[ "${WITH_CLAUDE}" == "true" ]]; then
   # Generation gate and skill scan the hooks and the exported agents call. They sit in
   # bin/ (the hooks call $CLAUDE_PROJECT_DIR/bin/validate-generated.js); the validator
   # detects the standalone layout (framework/shared, config/<env>.json) on its own.
-  for f in validate-generated.js _secret-patterns.js _help.js scan-skills.sh; do
+  for f in validate-generated.js _secret-patterns.js _help.js _shell-guard.js scan-skills.sh; do
     cp "${ROOT_DIR}/bin/${f}" "${OUTPUT_DIR}/bin/${f}"
   done
   chmod +x "${OUTPUT_DIR}/bin/scan-skills.sh"
@@ -1738,10 +1745,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -1773,7 +1780,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: k6-reports-${{ github.run_id }}
           path: reports/
@@ -2188,7 +2195,7 @@ chmod +x ./k6-<client>
 
 BINARYEOF
   # Replace <client> with actual client name in the binary section
-  sed -i '' "s|k6-<client>|k6-${CLIENT}|g" "${OUTPUT_DIR}/README.md"
+  sed -i.bak "s|k6-<client>|k6-${CLIENT}|g" "${OUTPUT_DIR}/README.md" && rm -f "${OUTPUT_DIR}/README.md.bak"
 fi
 
 if [[ "${WITH_MCP}" == "true" ]]; then

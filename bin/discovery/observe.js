@@ -126,7 +126,7 @@ function maskValues(candidates, data) {
 
 /**
  * Redact free text before it reaches a model: known --data values become {{key}}, then JWTs,
- * emails, long opaque tokens and any run of 4+ digits are replaced.
+ * emails, opaque ids (10+ chars mixing letters and digits) and any run of 4+ digits are replaced.
  */
 function redact(text, data) {
   if (typeof text !== "string" || !text) return text;
@@ -139,7 +139,8 @@ function redact(text, data) {
   return out
     .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, "<jwt>")
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "<email>")
-    .replace(/\b(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{20,}\b/g, "<token>")
+    // Opaque ids: 10+ chars mixing letters and digits (pure digit runs fall to <n> below).
+    .replace(/\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{10,}\b/g, "<token>")
     .replace(/\d{4,}/g, (m, at, all) => (isPort(m, at, all) ? m : "<n>"));
 }
 

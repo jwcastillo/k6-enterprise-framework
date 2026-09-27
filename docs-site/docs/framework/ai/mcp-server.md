@@ -133,6 +133,10 @@ Execute a k6 load test for a client.
 | `profile` | string | no | `smoke` | Load profile: smoke, quick, load, stress |
 | `env` | string | no | `default` | Config environment name |
 
+`run_test` has no timeout by default (load tests can last hours); set
+`K6_MCP_CMD_TIMEOUT_MS` in the server's environment to cap it. Every other command the
+server runs (scaffolding, validators) is killed after 300 s.
+
 **Returns:**
 
 ```json
