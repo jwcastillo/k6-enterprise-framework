@@ -126,5 +126,8 @@ No detiene:
 - Que una persona apruebe lo equivocado. Lee el resumen antes de escribir el código.
 - A root, ni a un proceso que corra con tu usuario y falsifique un registro a propósito
   (puede leer el secreto) o maneje una pseudo-terminal. Para agentes, combínalo con el
-  sandbox de Claude Code (escritura limitada al proyecto), bloquea `approve-run.sh` en los
-  hooks de Bash del agente y deja el directorio de aprobaciones fuera de su alcance.
+  sandbox de Claude Code (escritura limitada al proyecto) y deja el directorio de
+  aprobaciones fuera de su alcance. El hook del repo y el guard del equipo de agentes ya
+  niegan que un agente ejecute `approve-run.sh` / `_run-approval.js`; no ven una copia
+  renombrada o enlazada en otro lugar, por eso la verificación de terminal y el HMAC siguen
+  siendo la frontera real.

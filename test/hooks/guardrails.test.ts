@@ -159,6 +159,26 @@ describe("checkScenario (PostToolUse)", () => {
   });
 });
 
+describe("checkBash: run approvals", () => {
+  it("blocks the approval tool in any form, even with the unsafe opt-in", () => {
+    for (const cmd of [
+      "./bin/approve-run.sh --scenario=perf/x --profile=load --env=production",
+      "bash bin/approve-run.sh",
+      "source bin/approve-run.sh",
+      "node bin/_run-approval.js approve",
+      "script -qc bin/approve-run.sh /dev/null",
+      "unbuffer bin/approve-run.sh",
+    ]) {
+      expect(checkBash(cmd, { K6_AGENT_ALLOW_UNSAFE: "1" }), cmd).toMatch(/approvals are human-only: ask the user to run bin\/approve-run\.sh/);
+    }
+    expect(checkBash("cat bin/approve-run.sh", {})).toBeNull();
+  });
+
+  it("fails closed on the approval tool when the shell parser is missing", () => {
+    expect(checkBash("bin/approve-run.sh", {}, null)).toMatch(/_shell-guard\.js is missing/);
+  });
+});
+
 describe("hook process", () => {
   it("denies with exit 2 and a message on stderr", () => {
     const res = runHook("bash", { command: "k6 run x.js" });

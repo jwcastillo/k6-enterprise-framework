@@ -121,5 +121,7 @@ Does not stop:
 - A human approving the wrong thing. Read the summary before typing the code.
 - Anyone with root, or any process running as your user that deliberately forges a record
   (it can read the secret) or drives a pseudo-terminal. For agents, pair this with the
-  Claude Code sandbox (writes limited to the project), deny `approve-run.sh` in the agent
-  Bash hooks, and keep the approvals directory out of the agent's reach.
+  Claude Code sandbox (writes limited to the project) and keep the approvals directory out
+  of the agent's reach. The repo hook and the agent-team guard already deny any agent run
+  of `approve-run.sh` / `_run-approval.js`; they cannot see a copy renamed or linked
+  elsewhere, which is why the terminal check and the HMAC stay the real boundary.

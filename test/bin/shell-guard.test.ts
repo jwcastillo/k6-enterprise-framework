@@ -45,6 +45,44 @@ describe("parseShell", () => {
   });
 });
 
+// Every way an agent could launch the human-only approval tool.
+const APPROVAL_RUNS = [
+  "./bin/approve-run.sh --scenario=perf/x --profile=load --env=production",
+  "bin/approve-run.sh",
+  "bash bin/approve-run.sh --profile=load",
+  "sh ./bin/approve-run.sh",
+  "source bin/approve-run.sh",
+  ". bin/approve-run.sh",
+  `bash -c "./bin/approve-run.sh --profile=load"`,
+  `eval "bin/approve-run.sh"`,
+  "node bin/_run-approval.js approve --client=x",
+  "env -u NODE_OPTIONS node ./bin/_run-approval.js approve",
+  "script -qc 'bin/approve-run.sh --profile=load' /dev/null",
+  "unbuffer ./bin/approve-run.sh",
+  `expect -c "spawn ./bin/approve-run.sh; interact"`,
+  `python3 -c "import pty; pty.spawn(['bin/approve-run.sh'])"`,
+  "find bin -name approve-run.sh -exec bash {} ;",
+  "sudo -u someone /repo/bin/approve-run.sh",
+];
+
+describe("analyze: run approvals", () => {
+  it("flags every way of launching the approval tool", () => {
+    for (const cmd of APPROVAL_RUNS) expect(analyze(cmd).approval, cmd).toBe(true);
+  });
+
+  it("allows reading or mentioning it", () => {
+    for (const cmd of [
+      "cat bin/approve-run.sh",
+      "grep -n approve-run bin/export-client.sh",
+      `git commit -m "docs: mention bin/approve-run.sh"`,
+      "pnpm test test/bin/run-approval.test.ts",
+      "ls bin",
+    ]) {
+      expect(analyze(cmd).approval, cmd).toBe(false);
+    }
+  });
+});
+
 describe("analyze", () => {
   it("finds k6 load through shells, eval, env -S and wrappers", () => {
     for (const cmd of [
