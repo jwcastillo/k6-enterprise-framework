@@ -35,4 +35,4 @@ test runs.
 ## Troubleshooting
 
 - Tool missing in Claude Code: rebuild, then restart the session; check `claude mcp list`.
-- `run_test` exit codes are the runner's (0 / 1 / 99 / 107 / 108).
+- `run_test` exit codes are the runner's (0 / 1 / 99 / 107 / 108 / 109).

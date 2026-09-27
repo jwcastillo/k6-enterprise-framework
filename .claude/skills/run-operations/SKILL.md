@@ -1,6 +1,6 @@
 ---
 name: run-operations
-description: Operate k6 test runs in this framework through the run-test.sh runner — choosing a load profile, the smoke-before-load order, safety gates (quarantined / experimental / unsafe), the target guard, exit codes 0 / 1 / 99 / 107 / 108, capacity search, and how to stop or abort a run. Use when asked to "run the smoke test for <scenario>", "execute a load/stress/soak run", "why did run-test.sh exit 99/107/108", or "stop the running test". Not for writing scenarios (k6-scenario-authoring), cluster runs (k6-distributed-runs), or interpreting results (results-analysis).
+description: Operate k6 test runs in this framework through the run-test.sh runner — choosing a load profile, the smoke-before-load order, safety gates (quarantined / experimental / unsafe), the target guard, exit codes 0 / 1 / 99 / 107 / 108 / 109, human run approval, capacity search, and how to stop or abort a run. Use when asked to "run the smoke test for <scenario>", "execute a load/stress/soak run", "why did run-test.sh exit 99/107/108/109", or "stop the running test". Not for writing scenarios (k6-scenario-authoring), cluster runs (k6-distributed-runs), or interpreting results (results-analysis).
 ---
 
 # Run operations
@@ -55,8 +55,26 @@ is refused with exit `108` unless the matching flag is passed.
 
 - `--quarantined` / `--experimental`: allowed after telling the human why.
 - `--unsafe`: stop and ask the human every time. State what makes it unsafe.
-- The standalone runner does not enforce gates. Check the scenario source for
-  `export const gate` yourself and apply the same rule.
+- The standalone runner has no unlock flags: a gated scenario there is a guarded run
+  (exit `109` until a human approves it). Still check `export const gate` yourself and
+  apply the same rule.
+
+## Human approval (guarded runs)
+
+The runners refuse a guarded run with exit `109` until a human approved exactly that
+client, scenario, profile and env. Guarded: an unlocked gate, production load, an env
+outside the client's `nonProdEnvs`, or a heavy profile (stress, spike, breakpoint, soak,
+capacity, throughput-high, throughput-ramp by default). The runner does not guard smoke,
+quick or load on a non-production env; the rules above still apply to those runs.
+
+- On a guarded run: stop, tell the human the exact command the runner printed
+  (`bin/approve-run.sh --scenario=... --profile=... --env=...`) and wait. The human runs it
+  in their own terminal.
+- Never run, script, wrap or pipe into approve-run.sh, never create or edit files in the
+  approvals directory, and never try to fake a terminal. An approval is single use: a new
+  run needs a new one.
+- An approval is on top of the other rules (smoke first, the human's "yes", gate flags),
+  not a replacement.
 
 ## Target guard
 
@@ -75,6 +93,7 @@ The standalone runner has no target guard: confirm the target host with the huma
 | 99 | Thresholds failed (SLO not met) or regression gate failed | A valid result, not a crash. Analyze; never "fix" it by loosening thresholds. |
 | 107 | Build/script error, missing file, or target guard refusal | Fix the script or config; re-run smoke. |
 | 108 | Scenario is gated and the flag was not passed | Ask the human (see gates). |
+| 109 | Guarded run without a human approval | Stop; ask the human to run approve-run.sh (see human approval). |
 
 ## Artifacts
 
