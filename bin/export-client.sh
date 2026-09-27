@@ -1473,7 +1473,7 @@ if [[ "${WITH_CLAUDE}" == "true" ]]; then
   # Generation gate and skill scan the hooks and the exported agents call. They sit in
   # bin/ (the hooks call $CLAUDE_PROJECT_DIR/bin/validate-generated.js); the validator
   # detects the standalone layout (framework/shared, config/<env>.json) on its own.
-  for f in validate-generated.js _secret-patterns.js _help.js scan-skills.sh; do
+  for f in validate-generated.js _secret-patterns.js _help.js _shell-guard.js scan-skills.sh; do
     cp "${ROOT_DIR}/bin/${f}" "${OUTPUT_DIR}/bin/${f}"
   done
   chmod +x "${OUTPUT_DIR}/bin/scan-skills.sh"

@@ -36,6 +36,40 @@ describe("checkBash", () => {
     expect(checkBash("K6_ALLOW_PROD_LOAD=true ./bin/run-test.sh --env=production", {})).toMatch(/human/);
     expect(checkBash("./bin/run-test.sh --scenario=perf/x --unsafe", { K6_AGENT_ALLOW_UNSAFE: "1" })).toBeNull();
   });
+
+  // Review finding: regexes on raw text were bypassed by quoting and indirection.
+  it("blocks k6 load hidden behind shells, eval and quoting", () => {
+    for (const cmd of [`bash -c "k6 run app.js"`, `sh -c 'k6 run app.js'`, `k6" "run app.js`, `eval "k6 cloud x.js"`, `k""6 run x.js`]) {
+      expect(checkBash(cmd, {}), cmd).toMatch(/run-test\.sh/);
+    }
+  });
+
+  it("blocks guarded flags smuggled through variables", () => {
+    for (const cmd of [
+      "V=--unsafe; ./bin/run-test.sh --scenario=perf/x $V",
+      "K6_ALLOW_PROD_LOAD=$V ./bin/run-test.sh --env=production",
+      `V=K6_ALLOW_PROD_LOAD; export "$V=true"; ./bin/run-test.sh --profile=smoke`,
+      "$RUNNER --scenario=perf/x",
+      "cat cmd.txt | bash",
+    ]) {
+      expect(checkBash(cmd, { K6_AGENT_ALLOW_UNSAFE: "1" }), cmd).toMatch(/indirection not allowed/);
+    }
+  });
+
+  it("fails closed on unparseable lines that mention k6 or the runner, open otherwise", () => {
+    expect(checkBash(`./bin/run-test.sh --scenario="x`, {})).toMatch(/Cannot parse/);
+    expect(checkBash(`echo "unterminated`, {})).toBeNull();
+  });
+
+  it("fails closed when the shell parser module is missing", () => {
+    expect(checkBash("./bin/run-test.sh --scenario=api/x", {}, null)).toMatch(/_shell-guard\.js is missing/);
+    expect(checkBash("ls", {}, null)).toBeNull();
+  });
+
+  it("does not block everyday commands that only mention k6 in data", () => {
+    expect(checkBash(`git log --grep "k6 run" && ls`, {})).toBeNull();
+    expect(checkBash("pnpm test 2>&1 | tail -5", {})).toBeNull();
+  });
 });
 
 describe("checkWrite", () => {
@@ -48,8 +82,28 @@ describe("checkWrite", () => {
     expect(checkWrite("src/core/config.ts", tracked)).toBeNull();
   });
 
-  it("fails open when git cannot tell", () => {
-    expect(checkWrite("x.har", () => null)).toBeNull();
+  it("fails closed when git cannot tell", () => {
+    expect(checkWrite("x.har", () => null)).toMatch(/cannot be verified as gitignored/);
+    expect(checkWrite("src/core/config.ts", () => null)).toBeNull();
+  });
+
+  it("covers Playwright traces, storage/auth state and HAR variants", () => {
+    const tracked = () => false;
+    for (const f of [
+      "clients/acme/trace.zip",
+      "clients/acme/checkout.trace.zip",
+      "clients/acme/storage-state.json",
+      "clients/acme/storageState.json",
+      "clients/acme/storage-state-admin.json",
+      "clients/acme/admin-auth-state.json",
+      "clients/acme/flow.har.json",
+      "clients/acme/flow.har.gz",
+    ]) {
+      expect(checkWrite(f, tracked), f).toMatch(/gitignored/);
+      expect(checkWrite(f, () => true), f).toBeNull();
+    }
+    expect(checkWrite("clients/acme/config/default.json", tracked)).toBeNull();
+    expect(checkWrite("docs/tracing.md", tracked)).toBeNull();
   });
 
   it("uses real gitignore rules end to end", () => {
