@@ -163,13 +163,27 @@ También sigue lo que un comando delega:
 - Escribir y ejecutar: una línea que escribe un archivo (`>`, `tee`, `cp`, `mv`,
   `sed -i`, `dd of=`, heredoc a un archivo, ...) y ejecuta ese archivo, un script junto a
   él, o un `package.json`/Makefile que reescribió se deniega, porque el hook lee los
-  archivos antes de que la línea corra. Los escritores con destino desconocido
-  (`curl -o`, `git checkout`, `node -e`, un destino en variable, ...) cuentan como que
-  escriben cualquier cosa.
-- Cualquier asignación de entorno (`VAR=… cmd`, `env VAR=…`, `export VAR=…`) anterior en
-  la línea a k6, un runner, un script de paquete o un archivo de script se deniega:
-  `PATH=…` o `npm_config_script_shell=…` cambiarían lo que se ejecuta. Las asignaciones
-  antes de otros comandos están permitidas.
+  archivos antes de que la línea corra. `openssl -out`, `sponge`, `split`/`csplit` (su
+  prefijo de salida) y `exec N>archivo` cuentan como escritores. Los escritores con
+  destino desconocido (`curl -o`, `git checkout`, `awk`, `node -e`, un destino en
+  variable, ...) cuentan como que escriben cualquier cosa, salvo frente a los runners y
+  las herramientas de `bin/` del repo (nunca se leen), que solo se marcan con una
+  escritura en su propio path: `git pull && ./bin/run-test.sh …` está permitido.
+- Una asignación de entorno (`VAR=… cmd`, `env VAR=…`, `export VAR=…`) anterior en la
+  línea a k6, un runner, un script de paquete o un archivo de script se deniega:
+  `PATH=…`, `NODE_OPTIONS=…` o `npm_config_script_shell=…` cambiarían lo que se ejecuta.
+  Los nombres inertes están permitidos: `NODE_ENV`, `CI`, `DEBUG`, `TZ`, `LANG`, `LC_*`,
+  `FORCE_COLOR`, `NO_COLOR`, `TERM`, `COLUMNS` y `K6_*`, salvo `K6_ALLOW_PROD_LOAD` y los
+  `K6_*` que eligen binario, imagen, extensión, CLI de reportes u origen de secretos o
+  saltean chequeos (`K6_BINARY*`, `K6_SKIP_*`, ...). Las asignaciones antes de otros
+  comandos están permitidas.
+- k6, el nombre de un runner o los interruptores unsafe/prod-load dentro de los
+  **argumentos** de otro programa se deniegan: `docker run … k6`,
+  `kubectl run|exec … -- k6`, `ssh host k6 …`, `vim -c '!k6 …'`,
+  `awk 'BEGIN{system("k6 …")}'`, `python3 -c`, `perl -e`, `node -e` y similares. Las
+  herramientas de datos quedan exentas (echo, printf, grep, rg, sed, git, gh, cat, ls, jq,
+  shellcheck, ...), así los mensajes de commit y los patrones de búsqueda que mencionan
+  k6 siguen pasando.
 - `watch`, `find -exec`, configuración de git que ejecuta programas (`-c core.pager=…`,
   `alias.*`, `--exec-path=`), variables como `BASH_ENV`/`GIT_PAGER`, nombres de comando
   con caracteres de glob o llaves y `helm --post-renderer` cuentan como indirección.
@@ -182,9 +196,12 @@ una búsqueda de texto, así que no hay respaldo basado en texto), y cuando falt
 `case … esac` se parsean. Fallan abierto ante sus propios errores internos, así un hook
 roto nunca traba una sesión.
 
-El hook es defensa en profundidad de mejor esfuerzo, no un sandbox. No ve lo que hacen
-`node -e` / `python -c`, un binario renombrado o un programa lanzado por una receta de
-make, y un agente decidido con acceso a la shell puede encontrar otros caminos. El límite
+El hook es defensa en profundidad de mejor esfuerzo, no un sandbox. Los intérpretes y los
+lanzadores remotos o de contenedores solo se detectan cuando el token de k6/runner aparece
+literalmente en sus argumentos; los binarios renombrados, los payloads codificados o
+calculados dentro del código de un intérprete y los archivos descargados en una llamada
+de herramienta y ejecutados en otra no se ven, y un agente decidido con acceso a la shell
+puede encontrar otros caminos. El límite
 de aplicación es el chequeo de aprobación propio del runner (agregado en un cambio
 aparte): el hook existe para atrapar errores y evasiones obvias temprano, con un mensaje
 claro.
