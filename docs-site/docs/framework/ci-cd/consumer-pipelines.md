@@ -50,6 +50,8 @@ Exit codes from `./bin/run-test.sh`:
 | `1`  | Error               | Investigate infra or config |
 | `99` | Thresholds failed   | Block merge / notify team   |
 | `107`| Build error         | Fix build, re-run           |
+| `108`| Gated scenario      | CI never passes the unlock flags |
+| `109`| Guarded run without human approval | Heavy/production runs are not for CI (fail closed); see [Run Approval](../security/run-approval.md) |
 
 ---
 

@@ -50,6 +50,8 @@ Exit codes de `./bin/run-test.sh`:
 | `1`  | Error                | Investigar infra o config     |
 | `99` | Thresholds fallaron  | Bloquear merge / notificar    |
 | `107`| Error de build       | Corregir build, re-ejecutar   |
+| `108`| Escenario con gate   | CI nunca pasa los flags de desbloqueo |
+| `109`| Corrida protegida sin aprobación humana | Las corridas pesadas o de producción no son para CI (falla cerrado); ver [Aprobación de corridas](../security/run-approval.md) |
 
 ---
 

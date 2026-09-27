@@ -6,7 +6,9 @@ sidebar_position: 5
 
 Antes de arrancar k6, `bin/run-test.sh` ejecuta `bin/target-guard.js` sobre la config
 resuelta del cliente. Si alguna verificación falla, la corrida se rechaza, se imprimen los
-motivos y el script sale con código `107` — k6 nunca se lanza.
+motivos y el script sale con código `107` — k6 nunca se lanza. La carga en producción
+además vuelve la corrida protegida y exige aprobación humana
+([Aprobación de corridas](./run-approval.md), exit `109`).
 
 El guard **no** se puede saltar con `--skip-validate`.
 

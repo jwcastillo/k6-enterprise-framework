@@ -83,7 +83,7 @@ descubrimiento pide confirmar el alcance.
 | `k6-scenario-authoring` | Buckets, alias, imports solo goja, patrones, thresholds, tags, marcas de gate |
 | `flow-discovery` | Uso controlado de `discover-flow.js`, alcance, salidas, traspaso |
 | `guardrails-gate` | Tipos de `validate-generated`, fallas comunes, escaneo de secretos |
-| `run-operations` | Flags del runner, perfiles, gates, códigos de salida 0/1/99/107/108, aborto, búsqueda de capacidad |
+| `run-operations` | Flags del runner, perfiles, gates, códigos de salida 0/1/99/107/108/109, aborto, búsqueda de capacidad |
 | `results-analysis` | Mapa de artefactos, compare/trend/SLO, regla determinista primero, triage |
 | `k6-distributed-runs` | Chart Helm de k6-operator, paralelismo, testid, datos por Secret o init container |
 | `test-data-management` | SharedArray/DataPool, unicidad entre VUs y pods, generación, Redis, datos personales |

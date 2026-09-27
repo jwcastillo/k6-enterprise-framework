@@ -29,10 +29,12 @@ Las rutas de confianza predeterminadas son:
 <project>/dist/binaries
 ```
 
-Se puede sobrescribir con:
-```bash
-export K6_BINARY_ALLOWED_PATHS="/custom/bin:/another/path"
+Agrega directorios en la config del cliente (los runners ya no leen
+`K6_BINARY_ALLOWED_PATHS`; una variable de entorno no debe ampliar lo que es confiable):
+```json
+{ "trustedBinDirs": ["/custom/bin", "~/.local/bin"] }
 ```
+Ver [Aprobación de corridas y k6 confiable](../security/run-approval.md).
 
 ### Compilar un binario personalizado con xk6
 

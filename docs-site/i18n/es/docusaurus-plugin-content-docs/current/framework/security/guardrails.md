@@ -4,6 +4,12 @@ sidebar_position: 6
 ---
 # Guardarraíles de IA
 
+El límite que hace cumplir las reglas de ejecución está en los runners: una corrida
+pesada, insegura o de producción necesita una aprobación humana creada con
+`bin/approve-run.sh` (exit `109` sin ella), y k6 nunca se resuelve con el `PATH` de quien
+llama. Ver [Aprobación de corridas y k6 confiable](./run-approval.md). Las capas de abajo
+son defensa en profundidad.
+
 Tres capas mantienen lo que produce un agente de IA dentro de la especificación y de las
 reglas de seguridad:
 

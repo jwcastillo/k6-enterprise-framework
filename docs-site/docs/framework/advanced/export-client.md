@@ -33,7 +33,11 @@ The `bin/export-client.sh` script extracts a single client directory from the mo
 - A vendorized copy of the framework core (`framework/`)
 - Rewritten imports pointing to the local `framework/` directory
 - Generated configuration files (`package.json`, `tsconfig.json`, `webpack.config.js`, etc.)
-- A standalone test runner (`bin/run-test.sh`)
+- A standalone test runner (`bin/run-test.sh`) with the run guard (`bin/_run-guard.sh`,
+  `bin/_run-approval.js`, `bin/approve-run.sh`): k6 comes from trusted directories only, and
+  a guarded run (gated scenario, heavy profile, env outside `nonProdEnvs`, production load)
+  exits `109` until a human approves it. This runner has no gate unlock flags. See
+  [Run Approval and Trusted k6](../security/run-approval.md).
 - An update script to pull new framework versions (`bin/update-framework.sh`)
 
 The exported repository works independently — recipients only need `npm install && npm run build` to get started.

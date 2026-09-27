@@ -4,6 +4,11 @@ sidebar_position: 6
 ---
 # AI Guardrails
 
+The enforcement boundary for runs is in the runners: a heavy, unsafe or production run
+needs a human approval created with `bin/approve-run.sh` (exit `109` without one), and k6
+is never resolved through the caller's `PATH`. See
+[Run Approval and Trusted k6](./run-approval.md). The layers below are defense in depth.
+
 Three layers keep what an AI agent produces inside the spec and the security rules:
 
 1. **Generation gate** — `bin/validate-generated.js` checks every AI-produced artifact

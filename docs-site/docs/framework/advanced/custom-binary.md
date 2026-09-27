@@ -29,10 +29,12 @@ The default trusted paths are:
 <project>/dist/binaries
 ```
 
-Override with:
-```bash
-export K6_BINARY_ALLOWED_PATHS="/custom/bin:/another/path"
+Add directories in the client config (`K6_BINARY_ALLOWED_PATHS` is no longer read by the
+runners; an environment variable must not widen what is trusted):
+```json
+{ "trustedBinDirs": ["/custom/bin", "~/.local/bin"] }
 ```
+See [Run Approval and Trusted k6](../security/run-approval.md).
 
 ### Building a custom binary with xk6
 
