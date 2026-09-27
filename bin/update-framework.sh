@@ -71,7 +71,8 @@ EXAMPLES:
   ./bin/update-framework.sh --from=github:my-org/k6-enterprise-framework --ref=develop --yes
 
 WHAT GETS UPDATED:
-  framework/src/            <- monorepo/src/
+  framework/src/            <- monorepo/src/ (AI module pruned; an existing
+                               framework/src/ai in this repo is kept as is)
   framework/shared/         <- monorepo/shared/profiles/ + shared/schemas/
   framework/bin/            <- monorepo/bin/validate-config.js + testing/
   framework/VERSION         <- monorepo package.json version
@@ -177,16 +178,17 @@ echo -e "  New version:     ${GREEN}${NEW_VERSION}${RESET}"
 echo -e "  Source:          ${SOURCE_LABEL}"
 echo ""
 
-# Summary of changes
+# Summary of changes. `diff` exits 1 when files differ, which pipefail would turn into
+# a silent abort of the whole script; `|| true` keeps the count.
 log_step "Checking differences..."
-SRC_CHANGES=$(diff -rq "${FW_DIR}/src" "${MONOREPO_PATH}/src" 2>/dev/null | wc -l | tr -d ' ')
+SRC_CHANGES=$(diff -rq "${FW_DIR}/src" "${MONOREPO_PATH}/src" 2>/dev/null | wc -l | tr -d ' ' || true)
 PROFILE_CHANGES=0
 if [[ -d "${MONOREPO_PATH}/shared/profiles" ]]; then
-  PROFILE_CHANGES=$(diff -rq "${FW_DIR}/shared/profiles" "${MONOREPO_PATH}/shared/profiles" 2>/dev/null | wc -l | tr -d ' ')
+  PROFILE_CHANGES=$(diff -rq "${FW_DIR}/shared/profiles" "${MONOREPO_PATH}/shared/profiles" 2>/dev/null | wc -l | tr -d ' ' || true)
 fi
 SCHEMA_CHANGES=0
 if [[ -d "${MONOREPO_PATH}/shared/schemas" ]]; then
-  SCHEMA_CHANGES=$(diff -rq "${FW_DIR}/shared/schemas" "${MONOREPO_PATH}/shared/schemas" 2>/dev/null | wc -l | tr -d ' ')
+  SCHEMA_CHANGES=$(diff -rq "${FW_DIR}/shared/schemas" "${MONOREPO_PATH}/shared/schemas" 2>/dev/null | wc -l | tr -d ' ' || true)
 fi
 
 TOTAL_CHANGES=$((SRC_CHANGES + PROFILE_CHANGES + SCHEMA_CHANGES))
@@ -213,20 +215,37 @@ fi
 
 # ── Apply updates ─────────────────────────────────────────────────────────────
 log_step "Updating framework/src/..."
-rm -rf "${FW_DIR}/src"
+# Standalone repos do not ship the Node-only AI module (export-client.sh prunes it).
+# If this repo vendored framework/src/ai itself (possibly with local patches), keep it.
+AI_KEEP="$(mktemp -d)"
+if [[ -d "${FW_DIR}/src/ai" ]]; then
+  mv "${FW_DIR}/src/ai" "${AI_KEEP}/ai"
+fi
+rm -rf "${FW_DIR:?}/src"
 cp -R "${MONOREPO_PATH}/src" "${FW_DIR}/src"
+rm -rf "${FW_DIR:?}/src/ai"
+if [[ -d "${AI_KEEP}/ai" ]]; then
+  mv "${AI_KEEP}/ai" "${FW_DIR}/src/ai"
+  log_info "Kept the repo's own framework/src/ai"
+fi
+rmdir "${AI_KEEP}"
+# The k6 barrel must not re-export the AI module (same as export-client.sh).
+if [[ -f "${FW_DIR}/src/index.ts" ]]; then
+  grep -v 'from "\./ai/index"' "${FW_DIR}/src/index.ts" > "${FW_DIR}/src/index.ts.tmp" || true
+  mv "${FW_DIR}/src/index.ts.tmp" "${FW_DIR}/src/index.ts"
+fi
 log_success "src/ updated"
 
 if [[ -d "${MONOREPO_PATH}/shared/profiles" ]]; then
   log_step "Updating framework/shared/profiles/..."
-  rm -rf "${FW_DIR}/shared/profiles"
+  rm -rf "${FW_DIR:?}/shared/profiles"
   cp -R "${MONOREPO_PATH}/shared/profiles" "${FW_DIR}/shared/profiles"
   log_success "shared/profiles/ updated"
 fi
 
 if [[ -d "${MONOREPO_PATH}/shared/schemas" ]]; then
   log_step "Updating framework/shared/schemas/..."
-  rm -rf "${FW_DIR}/shared/schemas"
+  rm -rf "${FW_DIR:?}/shared/schemas"
   cp -R "${MONOREPO_PATH}/shared/schemas" "${FW_DIR}/shared/schemas"
   log_success "shared/schemas/ updated"
 fi
