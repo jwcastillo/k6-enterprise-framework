@@ -66,8 +66,8 @@ function reviewerAllows(argv) {
 }
 
 function reviewer(a) {
-  if (a.error || a.indirect) return deny("reviewer: the command could not be verified (parse error or indirection)");
-  const [r, ...more] = a.commands;
+  if (a.error || a.indirect || a.k6Load) return deny("reviewer: the command could not be verified (parse error, indirection or load)");
+  const [r, ...more] = a.commands.filter((c) => c.depth === 0); // package scripts nest their own commands
   if (!r || more.length || r.cmd.piped || r.cmd.redirects.length || r.cmd.heredocs.length || r.assigns.length) {
     return deny("reviewer: one command only — no chaining, pipes, redirection, substitution or env assignments");
   }
@@ -89,13 +89,22 @@ const KUBECTL_CHANGE = new Set(["apply", "create", "delete", "patch", "scale", "
 const safeRedirect = (x) => x.op === ">&" || x.op === "<&" || (/^(>|&>)/.test(x.op) && x.target?.text === "/dev/null");
 const underReports = (t) => !t.includes("..") && /^(\.\/)?reports(\/|$)/.test(t);
 
-function flagValue(args, name) {
+/** Every value given for a flag (`--x=v` or `--x v`), in order. The runners keep the last. */
+function flagValues(args, name) {
+  const out = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith(`${name}=`)) return args[i].slice(name.length + 1);
-    if (args[i] === name) return args[i + 1] ?? "";
+    if (args[i].startsWith(`${name}=`)) out.push(args[i].slice(name.length + 1));
+    else if (args[i] === name) out.push(args[i + 1] ?? "");
   }
-  return null;
+  return out;
 }
+
+// Environments treated as non-production; anything else (prod, preprod, live, a new
+// name, ...) asks the human.
+const NON_PROD_ENV = /^(default|local|dev|development|test|testing|qa|ci|sandbox|staging|stage|uat)$/i;
+// helm/kubectl flags that run a local program (post-renderer, kubeconfig exec plugins)
+// or reach the raw API.
+const CLUSTER_EXEC_FLAGS = /^--(post-renderer|kubeconfig|raw|exec)(-args)?(=|$)/;
 
 function operatorCommand(r) {
   const argv = r.cmd.words; // as typed: wrappers (nohup, env, bash -c ...) are not on the list
@@ -107,10 +116,13 @@ function operatorCommand(r) {
 
   if (RUNNERS.some((p) => scriptIs(script, p))) {
     if (scriptArgs.some((a) => a === "--unsafe" || a.startsWith("--unsafe="))) return ask("unsafe-gated scenario");
-    const profile = flagValue(scriptArgs, "--profile");
-    if (profile !== null && !/^(smoke|quick)$/.test(profile)) return ask(`profile heavier than smoke/quick (${profile})`);
-    const env = flagValue(scriptArgs, "--env");
-    if (env !== null && /prod/i.test(env)) return ask("production environment");
+    for (const flag of ["--profile", "--env"]) {
+      if (new Set(flagValues(scriptArgs, flag)).size > 1) return ask(`${flag} given more than once (the runner uses the last)`);
+    }
+    const profile = flagValues(scriptArgs, "--profile").pop();
+    if (profile !== undefined && !/^(smoke|quick)$/.test(profile)) return ask(`profile heavier than smoke/quick (${profile})`);
+    const env = flagValues(scriptArgs, "--env").pop();
+    if (env !== undefined && !NON_PROD_ENV.test(env)) return ask(`environment '${env}' is not a known non-production one`);
     if (scriptIs(script, "bin/run-distributed.sh") && !scriptArgs.some((a) => a === "--help" || a === "--dry-run")) {
       return ask("distributed run on the cluster");
     }
@@ -121,6 +133,7 @@ function operatorCommand(r) {
   }
   if (name === "node" && READ_ONLY_TOOLS.some((p) => scriptIs(script, p))) return allow();
   if (name === "helm" || name === "kubectl") {
+    if (args.some((a) => CLUSTER_EXEC_FLAGS.test(a))) return ask(`${name} flag that runs a local program or the raw API`);
     const sub = args.find((a) => !isFlag(a));
     if ((name === "helm" ? HELM_READ : KUBECTL_READ).has(sub)) return allow();
     if ((name === "helm" ? HELM_CHANGE : KUBECTL_CHANGE).has(sub)) return ask(`cluster change (${name})`);
@@ -152,10 +165,10 @@ function operator(a) {
 }
 
 /** @returns {{decision: "allow"|"deny"|"ask", reason?: string}} */
-function decide(profile, command) {
+function decide(profile, command, cwd = undefined) {
   const cmd = String(command || "").trim();
-  if (profile === "reviewer") return reviewer(analyze(cmd));
-  if (profile === "operator") return operator(analyze(cmd));
+  if (profile === "reviewer") return reviewer(analyze(cmd, { cwd }));
+  if (profile === "operator") return operator(analyze(cmd, { cwd }));
   if (profile === "discoverer") {
     return /discover-flow\.js(?!.*--help\b)/.test(cmd)
       ? { decision: "ask", reason: "Confirm the discovery scope: URL, environment, allowed/blocked hosts, stop rules" }
@@ -172,7 +185,8 @@ if (require.main === module) {
   process.stdin.on("end", () => {
     let result;
     try {
-      result = decide(process.argv[2], JSON.parse(input || "{}").tool_input?.command ?? "");
+      const payload = JSON.parse(input || "{}");
+      result = decide(process.argv[2], payload.tool_input?.command ?? "", payload.cwd);
     } catch (e) {
       result = deny(`agent-bash-guard: ${e instanceof SyntaxError ? "unreadable hook payload" : `internal error (${e.message})`}; failing closed`);
     }

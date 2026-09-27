@@ -176,6 +176,35 @@ describe("agent-bash-guard", () => {
     expect(decide("operator", cmd).decision).toBe("allow");
   });
 
+  // Adversarial review: the runners keep the LAST --profile/--env; helm/kubectl flags that run programs.
+  it.each([
+    "./bin/run-test.sh --scenario=api/x --profile=smoke --profile=stress",
+    "./bin/run-test.sh --scenario=api/x --profile smoke --profile=stress",
+    "./bin/run-test.sh --scenario=api/x --env=staging --env=production",
+    "./bin/run-test.sh --scenario=api/x --env=preprod",
+    "./bin/run-test.sh --scenario=api/x --env=live",
+    "helm template k6 chart --kubeconfig=/tmp/k",
+    "kubectl get --raw /api",
+    "kubectl --kubeconfig /tmp/k get pods",
+  ])("operator asks the human for %s", (cmd) => {
+    expect(decide("operator", cmd).decision).toBe("ask");
+  });
+
+  it("operator never allows helm --post-renderer or package scripts", () => {
+    expect(decide("operator", "helm template k6 chart --post-renderer=./r.sh").decision).toBe("deny");
+    expect(decide("operator", "helm template k6 chart --post-renderer ./r.sh").decision).toBe("deny");
+    expect(decide("operator", "pnpm test:reference").decision).toBe("deny");
+  });
+
+  it("operator allows a known non-production environment given once", () => {
+    expect(decide("operator", "./bin/run-test.sh --scenario=api/x --profile=smoke --env=staging").decision).toBe("allow");
+  });
+
+  it("reviewer still allows package scripts that resolve cleanly", () => {
+    expect(decide("reviewer", "pnpm test").decision).toBe("allow");
+    expect(decide("reviewer", "pnpm lint").decision).toBe("allow");
+  });
+
   it("discoverer asks before every discovery run", () => {
     expect(decide("discoverer", "node bin/discover-flow.js --url=https://staging.example.com").decision).toBe("ask");
     expect(decide("discoverer", "node bin/discover-flow.js --help").decision).toBe("allow");
