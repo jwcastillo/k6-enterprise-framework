@@ -90,6 +90,10 @@ jobs:
       - name: "Setup k6"
         uses: grafana/setup-k6-action@v1
 
+      - name: Put k6 in a trusted directory
+        # The runners never resolve k6 through PATH (bin/_run-guard.sh).
+        run: sudo install -m 0755 "$(command -v k6)" /usr/local/bin/k6
+
       # ── 3. Go toolchain ─────────────────────────────────────────────────────
       # Required for bin/compare.sh Tier B: go install github.com/jwcastillo/k6-compare@latest
       - name: "Setup Go"

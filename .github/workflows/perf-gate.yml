@@ -69,6 +69,10 @@ jobs:
         with:
           k6-version: "2.3.0"
 
+      - name: Put k6 in a trusted directory
+        # The runners never resolve k6 through PATH (bin/_run-guard.sh).
+        run: sudo install -m 0755 "$(command -v k6)" /usr/local/bin/k6
+
       - uses: pnpm/action-setup@v6
       - name: Setup Node.js
         uses: actions/setup-node@v7

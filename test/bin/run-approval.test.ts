@@ -142,6 +142,20 @@ describe("run-test.sh — trusted k6 resolution", () => {
   });
 });
 
+describe("run-test.sh — trusted k6 permissions", () => {
+  it("refuses a world-writable k6 outside CI", () => {
+    const stub = path.join(trustedDir, "k6");
+    fs.chmodSync(stub, 0o777);
+    try {
+      const r = runner(["--profile=smoke"], { K6_BINARY_PATH: stub, CI: "" });
+      expect(r.status, out(r)).toBe(1);
+      expect(ran(trustedDir)).toBe(false);
+    } finally {
+      fs.chmodSync(stub, 0o755);
+    }
+  });
+});
+
 describe("run-test.sh — human approval for guarded runs", () => {
   it("refuses a heavy profile without approval with exit 109 and approve-run instructions", () => {
     const r = runner(["--profile=stress"]);

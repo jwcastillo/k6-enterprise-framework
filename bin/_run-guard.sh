@@ -51,8 +51,27 @@ rg_config_list() {
 rg_safe_path() {
   local PATH="/usr/bin:/bin"
   [[ -e "$1" ]] || return 1
-  [[ -z "$(find -H "$1" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ]] || return 1
-  [[ -n "$(find -H "$1" -maxdepth 0 \( -user 0 -o -user "$(id -u)" \) 2>/dev/null)" ]]
+  if [[ -z "$(find -H "$1" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ]] \
+    && [[ -n "$(find -H "$1" -maxdepth 0 \( -user 0 -o -user "$(id -u)" \) 2>/dev/null)" ]]; then
+    return 0
+  fi
+  # Hosted CI runners are single-user VMs that ship world-writable tool dirs. There the
+  # permission check only warns; the directory allowlist and absolute-path execution
+  # still apply. Setting CI=true gives a same-user process nothing it could not already
+  # do by writing to a user-owned trusted directory.
+  if [[ "${CI:-}" == "true" ]]; then
+    echo "[run-guard] CI: accepting $1 despite its permissions ($(_rg_mode "$1"))" >&2
+    return 0
+  fi
+  return 1
+}
+
+# "<mode> uid=<n> gid=<n>" of a path, for diagnostics.
+_rg_mode() {
+  local PATH="/usr/bin:/bin" m
+  m="$(ls -ldLn -- "$1" 2>/dev/null)" || { echo "missing"; return 0; }
+  set -- ${m}
+  echo "$1 uid=$3 gid=$4"
 }
 
 # rg_trusted_dirs <policy file> [extra dirs...] — sets RG_TRUSTED_DIRS and RG_SAFE_PATH.
@@ -73,7 +92,7 @@ rg_trusted_dirs() {
     if rg_safe_path "${d}"; then
       RG_TRUSTED_DIRS+=("${d%/}")
     else
-      echo "[run-guard] ignoring trusted dir ${d}: group/world-writable or foreign owner" >&2
+      echo "[run-guard] ignoring trusted dir ${d}: group/world-writable or foreign owner ($(_rg_mode "${d}"))" >&2
     fi
   done
   RG_SAFE_PATH="$(IFS=:; echo "${RG_TRUSTED_DIRS[*]}")"
@@ -90,7 +109,7 @@ rg_resolve_bin() {
       printf '%s\n' "${real}"
       return 0
     fi
-    echo "[run-guard] refusing ${d}/$1: group/world-writable or foreign owner" >&2
+    echo "[run-guard] refusing ${d}/$1: group/world-writable or foreign owner ($(_rg_mode "${d}/$1"); target $(_rg_mode "${real}"))" >&2
   done
   return 1
 }

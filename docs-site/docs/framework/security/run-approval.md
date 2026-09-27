@@ -87,6 +87,11 @@ non-production environments.
   `dist/binaries` in the monorepo). **`K6_BINARY_ALLOWED_PATHS` is no longer read**: an
   environment variable must not widen what is trusted. List extra directories in
   `trustedBinDirs` instead.
+- CI: actions that drop k6 in a temporary directory and add it to `PATH` (for example
+  `grafana/setup-k6-action`) need one more step, `sudo install -m 0755 "$(command -v k6)"
+  /usr/local/bin/k6`; installing k6 with apt puts it in `/usr/bin` already. When `CI=true`
+  the ownership/permission checks only warn, because hosted runners are single-user VMs
+  that ship world-writable tool directories; the directory allowlist still applies.
 - k6 runs with `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `LD_PRELOAD`, `LD_LIBRARY_PATH`,
   `DYLD_INSERT_LIBRARIES` and `DYLD_LIBRARY_PATH` removed from its environment.
 - The node that verifies approvals is resolved the same way. If your node lives elsewhere

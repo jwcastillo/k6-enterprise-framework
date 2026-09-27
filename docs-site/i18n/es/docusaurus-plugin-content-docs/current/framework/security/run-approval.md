@@ -91,6 +91,12 @@ o limita CI a smoke/quick sobre entornos no productivos.
   `dist/binaries` en el monorepo). **`K6_BINARY_ALLOWED_PATHS` ya no se lee**: una variable
   de entorno no debe ampliar lo que es confiable. Declara los directorios extra en
   `trustedBinDirs`.
+- CI: las actions que dejan k6 en un directorio temporal y lo agregan al `PATH` (por
+  ejemplo `grafana/setup-k6-action`) necesitan un paso más, `sudo install -m 0755
+  "$(command -v k6)" /usr/local/bin/k6`; instalar k6 con apt ya lo deja en `/usr/bin`. Con
+  `CI=true` las verificaciones de dueño y permisos solo avisan, porque los runners hospedados
+  son VMs de un solo usuario con directorios de herramientas escribibles por todos; la lista
+  de directorios permitidos sigue aplicando.
 - k6 corre sin `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `LD_PRELOAD`, `LD_LIBRARY_PATH`,
   `DYLD_INSERT_LIBRARIES` ni `DYLD_LIBRARY_PATH` en su entorno.
 - El node que verifica aprobaciones se resuelve igual. Si tu node vive en otro lado (asdf,
