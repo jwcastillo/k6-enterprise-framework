@@ -192,6 +192,19 @@ async function settle(page, tracker, timeoutMs) {
  * @param {object} deps   { decider, chromium, log } — injectable for tests
  * @returns {Promise<{ flow: object, files: object, exitCode: number }>}
  */
+/**
+ * What to do with a request to `host`: "blocked" (--block-hosts), "off-allowlist"
+ * (main-frame navigation off --allow-hosts: aborted and the run stops), "strict"
+ * (any other request off --allow-hosts under --strict-hosts: aborted) or null (allow).
+ * Without --strict-hosts, subresources (XHR, scripts, iframes) to other hosts load.
+ */
+function routeVerdict(host, mainFrameNav, { allowHosts, blockHosts = [], strictHosts = false }) {
+  if (blockHosts.length && hostMatches(host, blockHosts)) return "blocked";
+  if (hostMatches(host, allowHosts)) return null;
+  if (mainFrameNav) return "off-allowlist";
+  return strictHosts ? "strict" : null;
+}
+
 async function runDiscovery(opts, deps = {}) {
   const log = deps.log || ((msg) => console.log(`[discover] ${msg}`));
   const decider = deps.decider;
@@ -239,22 +252,17 @@ async function runDiscovery(opts, deps = {}) {
     await context.route("**/*", (route) => {
       const request = route.request();
       const host = new URL(request.url()).hostname;
-      if (blockHosts.length && hostMatches(host, blockHosts)) {
-        tracker.blocked++;
-        return route.abort("blockedbyclient");
-      }
       let mainFrameNav = false;
       try {
         mainFrameNav = request.isNavigationRequest() && request.frame().parentFrame() === null;
       } catch {
         /* service worker requests have no frame */
       }
-      if (mainFrameNav && !hostMatches(host, allowHosts)) {
-        tracker.blocked++;
-        tracker.offAllowlist = tracker.offAllowlist || host;
-        return route.abort("blockedbyclient");
-      }
-      return route.fallback();
+      const verdict = routeVerdict(host, mainFrameNav, { allowHosts, blockHosts, strictHosts: opts.strictHosts });
+      if (!verdict) return route.fallback();
+      tracker.blocked++;
+      if (verdict === "off-allowlist") tracker.offAllowlist = tracker.offAllowlist || host;
+      return route.abort("blockedbyclient");
     });
     page.on("request", (req) => {
       tracker.pending.add(req);
@@ -443,4 +451,4 @@ async function runDiscovery(opts, deps = {}) {
   return { flow, files, exitCode: flow.outcome === "success" ? 0 : 3 };
 }
 
-module.exports = { runDiscovery, resolveValue, syntheticValue, assertNoPii, validateFlow, renderFlowMd, renderPlanMd, SCHEMA_PATH };
+module.exports = { runDiscovery, routeVerdict, resolveValue, syntheticValue, assertNoPii, validateFlow, renderFlowMd, renderPlanMd, SCHEMA_PATH };
