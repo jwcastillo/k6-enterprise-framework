@@ -34,7 +34,8 @@ const isFlag = (t) => t.startsWith("-");
 const scriptIs = (word, rel) => !!word && (word.text === rel || word.text === `./${rel}` || word.text.endsWith(`/${rel}`));
 
 const GIT_READ = new Set(["diff", "log", "show", "status"]);
-const GIT_WRITE_FLAGS = /^--(output|ext-diff)(=|$)|^-o$/;
+// Flags that write files or make git run another program.
+const GIT_WRITE_FLAGS = /^--(output|ext-diff|exec-path|config-env|textconv)(=|$)|^-[oc]$/;
 const gitReadOnly = (args) => GIT_READ.has(args[0]) && !args.some((a) => GIT_WRITE_FLAGS.test(a));
 
 // ── reviewer ────────────────────────────────────────────────────────────────

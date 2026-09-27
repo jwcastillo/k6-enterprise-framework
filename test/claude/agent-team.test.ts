@@ -196,6 +196,14 @@ describe("agent-bash-guard", () => {
     expect(decide("operator", "pnpm test:reference").decision).toBe("deny");
   });
 
+  it.each(["git log --exec-path=/tmp/x", "git log -c", "git show --config-env=core.pager=X HEAD", "git diff --textconv"])(
+    "operator and reviewer deny git exec/config flags: %s",
+    (cmd) => {
+      expect(decide("operator", cmd).decision).toBe("deny");
+      expect(decide("reviewer", cmd).decision).toBe("deny");
+    }
+  );
+
   it("operator allows a known non-production environment given once", () => {
     expect(decide("operator", "./bin/run-test.sh --scenario=api/x --profile=smoke --env=staging").decision).toBe("allow");
   });

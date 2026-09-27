@@ -17,6 +17,7 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 class ShellParseError extends Error {}
@@ -57,6 +58,8 @@ function parseShell(src, depth = 0) {
     let word = null; // {text, dynamic, quoted}
     let redirectOp = null;
     let atWordStart = true;
+    let caseDepth = 0; // open `case ... in` blocks
+    let casePattern = false; // reading a `pat|pat)` list
 
     const flushWord = () => {
       if (!word) return;
@@ -67,6 +70,17 @@ function parseShell(src, depth = 0) {
         redirectOp = null;
       } else {
         cmd.words.push(w);
+        const plain = !word.quoted && !word.dynamic;
+        // case WORD in  pat) ... ;;  esac — the header and the patterns are not commands.
+        if (plain && cmd.words.length === 3 && cmd.words[0].text === "case" && w.text === "in") {
+          caseDepth++;
+          casePattern = true;
+          cmd.words = [];
+        } else if (plain && caseDepth > 0 && cmd.words.length === 1 && w.text === "esac") {
+          caseDepth--;
+          casePattern = false;
+          cmd.words = [];
+        }
       }
       word = null;
     };
@@ -229,9 +243,33 @@ function parseShell(src, depth = 0) {
           i += redirectOp.length;
           continue;
         }
+        if (casePattern && c === "|" && two !== "||") {
+          flushWord(); // `a|b)` alternatives
+          i++;
+          continue;
+        }
+        if (caseDepth > 0 && (two === ";;" || two === ";&")) {
+          endCmd();
+          casePattern = true;
+          i += two === ";;" && s[i + 2] === "&" ? 3 : 2;
+          atWordStart = true;
+          continue;
+        }
         const piped = c === "|" && two !== "||";
         endCmd(piped);
         i += two === "&&" || two === "||" || two === ";;" || two === "|&" ? 2 : 1;
+        atWordStart = true;
+        continue;
+      }
+      if (c === "(" && casePattern && !word) {
+        i++; // optional `(pat)` form
+        continue;
+      }
+      if (c === ")" && casePattern) {
+        flushWord();
+        cmd.words = []; // the patterns; expansions in them were already parsed
+        casePattern = false;
+        i++;
         atWordStart = true;
         continue;
       }
@@ -306,14 +344,40 @@ function parseShell(src, depth = 0) {
 }
 
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
-const PACKAGE_MANAGERS = new Set(["pnpm", "npm", "yarn"]);
+const PACKAGE_MANAGERS = new Set(["pnpm", "npm", "yarn", "bun"]);
 const MAX_SCRIPT_BYTES = 256 * 1024;
 const MAX_SCRIPT_FILES = 16;
 /** The repo's own bin/ (this file's directory): reviewed tooling, not re-parsed. */
 const TRUSTED_BIN = path.resolve(__dirname) + path.sep;
 
+/**
+ * Per-line state. `dirs` holds every directory the line may be in: a `cd` adds its
+ * target without dropping the old one (the cd may sit in a subshell or fail), and a
+ * target that cannot be known sets `cwdUnknown`. `writes`/`execs` are absolute paths
+ * the line writes and runs as scripts ("*" = some unknown write).
+ */
 function newContext(cwd = process.cwd()) {
-  return { cwd, filesRead: 0 };
+  return { dirs: [path.resolve(cwd)], cwdUnknown: false, filesRead: 0, writes: [], execs: [] };
+}
+
+/** Absolute candidates for a path word, or null when the cwd cannot be known. */
+function candidates(text, ctx) {
+  if (text === "~" || text.startsWith("~/")) return [path.join(os.homedir(), text.slice(1))];
+  if (text.startsWith("~")) return null; // ~user
+  if (path.isAbsolute(text)) return [path.resolve(text)];
+  if (ctx.cwdUnknown) return null;
+  return [...new Set(ctx.dirs.map((d) => path.resolve(d, text)))];
+}
+
+/** `cd`/`pushd` (and `env -C`): widen the set of possible working directories. */
+function changeDir(target, ctx) {
+  if (!target) {
+    ctx.dirs.push(os.homedir());
+    return;
+  }
+  const c = target.dynamic || target.text === "-" || /[*?[\]{}]/.test(target.text) ? null : candidates(target.text, ctx);
+  if (!c) ctx.cwdUnknown = true;
+  else ctx.dirs = [...new Set([...ctx.dirs, ...c])];
 }
 
 /** Script text, or null when missing, too big, unreadable or over the per-line file budget. */
@@ -348,14 +412,14 @@ function isShellScript(abs) {
  */
 function packageScript(words, ctx) {
   const name = path.posix.basename(words[0].text);
-  let dir = ctx.cwd;
+  let dirWord = null;
   let i = 1;
   let workspace = false;
   for (; i < words.length && words[i].text.startsWith("-"); i++) {
     const t = words[i].text;
     const eq = /^--(dir|prefix|cwd)=(.*)$/.exec(t);
-    if (eq) dir = path.resolve(ctx.cwd, eq[2]);
-    else if (["-C", "--dir", "--prefix", "--cwd"].includes(t)) dir = path.resolve(ctx.cwd, words[++i]?.text ?? "");
+    if (eq) dirWord = { text: eq[2], dynamic: words[i].dynamic };
+    else if (["-C", "--dir", "--prefix", "--cwd"].includes(t)) dirWord = words[++i] ?? lit("");
     else if (/^(-r|--recursive|-F|--filter|-w|--workspace|--workspaces|-ws)$/.test(t) || /^--(filter|workspace)=/.test(t)) {
       workspace = true;
       if (/^(-F|--filter|-w|--workspace)$/.test(t)) i++;
@@ -366,30 +430,108 @@ function packageScript(words, ctx) {
   let script = null;
   let explicit = true;
   if (sub.text === "run" || sub.text === "run-script") script = words.slice(i + 1).find((w) => !w.text.startsWith("-")) ?? null;
-  else if (["test", "t", "tst", "start", "stop", "restart"].includes(sub.text)) script = { ...sub, text: /^t(e?st)?$/.test(sub.text) ? "test" : sub.text };
-  else if (name !== "npm") {
-    script = sub; // pnpm/yarn run an unknown command as a script
+  else if (name !== "bun" && ["test", "t", "tst", "start", "stop", "restart"].includes(sub.text)) {
+    script = { ...sub, text: /^t(e?st)?$/.test(sub.text) ? "test" : sub.text };
+  } else if (name !== "npm") {
+    script = sub; // pnpm/yarn/bun run an unknown command as a script
     explicit = false;
   }
   if (!script) return null;
-  if (script.dynamic || sub.dynamic) return { indirect: "a package script chosen by a variable" };
+  if (script.dynamic || sub.dynamic || dirWord?.dynamic) return { indirect: "a package script chosen by a variable" };
   if (workspace) return { indirect: "a workspace-wide package script run (write the script's command instead)" };
-  let scripts = null;
-  for (let d = dir; ; d = path.dirname(d)) {
-    try {
-      scripts = JSON.parse(fs.readFileSync(path.join(d, "package.json"), "utf8")).scripts || {};
+  const dirs = dirWord ? candidates(dirWord.text, ctx) : ctx.cwdUnknown ? null : ctx.dirs;
+  if (!dirs) return { indirect: "a package script in a directory that cannot be determined" };
+  // Nearest package.json from every directory the line may be in.
+  const found = [];
+  for (const start of dirs) {
+    for (let d = start; ; d = path.dirname(d)) {
+      const file = path.join(d, "package.json");
+      let scripts = null;
+      try {
+        scripts = JSON.parse(fs.readFileSync(file, "utf8")).scripts || {};
+      } catch {
+        if (d === path.dirname(d)) break;
+        continue;
+      }
+      ctx.execs.push(file);
+      if (typeof scripts[script.text] === "string") found.push(scripts);
       break;
-    } catch {
-      if (d === path.dirname(d)) break;
     }
   }
-  const body = scripts?.[script.text];
-  if (typeof body !== "string") return explicit ? { indirect: `a package script that cannot be resolved (${script.text})` } : null;
+  if (!found.length) return explicit ? { indirect: `a package script that cannot be resolved (${script.text})` } : null;
   return {
-    scripts: ["pre", "", "post"]
-      .filter((p) => !p || typeof scripts[p + script.text] === "string")
-      .map((p) => [`the package script ${p + script.text}`, scripts[p + script.text]]),
+    scripts: found.flatMap((scripts) =>
+      ["pre", "", "post"]
+        .filter((p) => typeof scripts[p + script.text] === "string")
+        .map((p) => [`the package script ${p + script.text}`, scripts[p + script.text]])
+    ),
   };
+}
+
+const MAKE_FILES = {
+  make: ["GNUmakefile", "makefile", "Makefile"],
+  just: ["justfile", "Justfile", ".justfile", "JUSTFILE"],
+  task: ["Taskfile.yml", "Taskfile.yaml", "taskfile.yml", "taskfile.yaml", "Taskfile.dist.yml"],
+};
+const MAKE_GUARDED_RE = /(^|[^\w.-])x?k6\b|run-test|run-distributed|run-regression|quick\.sh|find-capacity|--unsafe|K6_ALLOW_PROD_LOAD/;
+
+/**
+ * make/just/task: recipes are not parsed. The task file is read and refused when it
+ * mentions k6, the runners or the unsafe/prod-load switches, or when it cannot be read.
+ * @returns {string|null} indirect reason
+ */
+function taskRunner(words, ctx) {
+  const tool = { gmake: "make", make: "make", just: "just", task: "task" }[path.posix.basename(words[0].text)];
+  if (words.some((w) => w.dynamic)) return `${tool} with arguments from variables`;
+  let file = null;
+  let dir = null;
+  for (let i = 1; i < words.length; i++) {
+    const t = words[i].text;
+    const eq = /^--(file|makefile|justfile|taskfile|directory|dir|working-directory)=(.*)$/.exec(t);
+    if (eq) /file$/.test(eq[1]) ? (file = eq[2]) : (dir = eq[2]);
+    else if (["-f", "--file", "--makefile", "--justfile", "-t", "--taskfile"].includes(t)) file = words[++i]?.text ?? "";
+    else if (["-C", "--directory", "-d", "--dir", "--working-directory"].includes(t)) dir = words[++i]?.text ?? "";
+  }
+  const bases = dir === null ? (ctx.cwdUnknown ? null : ctx.dirs) : candidates(dir, ctx);
+  if (!bases) return `${tool} in a directory that cannot be determined`;
+  const files = bases.flatMap((b) => (file !== null ? [path.resolve(b, file)] : MAKE_FILES[tool].map((n) => path.join(b, n))));
+  const existing = files.filter((f) => fs.existsSync(f));
+  if (!existing.length) return `a ${tool} file that cannot be read`;
+  for (const f of existing) {
+    ctx.execs.push(f);
+    const text = readScript(f, ctx);
+    if (text === null) return `a ${tool} file that cannot be read (${path.basename(f)})`;
+    if (MAKE_GUARDED_RE.test(text)) return `a ${tool} file that mentions k6 or the runners (${path.basename(f)}); run the command directly`;
+  }
+  return null;
+}
+
+const OUT_REDIRECTS = new Set([">", ">>", "&>", "&>>", ">|", "<>"]);
+const COPY_WRITERS = new Set(["tee", "cp", "mv", "install", "ln", "rsync", "truncate", "dd", "sed", "perl"]);
+const OPAQUE_WRITERS = new Set(["curl", "wget", "patch", "tar", "unzip", "gunzip", "bunzip2", "xz", "unxz", "7z", "scp", "sftp"]);
+const GIT_WRITING = new Set(["checkout", "restore", "switch", "reset", "apply", "am", "pull", "merge", "rebase", "cherry-pick", "revert", "stash", "clone", "worktree", "mv", "rm"]);
+const INTERPRETERS = new Set(["node", "python", "python3", "perl", "ruby", "deno", "bun", "php", "lua"]);
+
+/** Record what a command writes (for the write-then-run check). */
+function recordWrites(cmd, argv, ctx) {
+  const add = (w) => {
+    const c = w.dynamic ? null : candidates(w.text, ctx);
+    if (!c) ctx.writes.push("*");
+    else ctx.writes.push(...c.filter((p) => !p.startsWith("/dev/")));
+  };
+  for (const x of cmd.redirects) if (OUT_REDIRECTS.has(x.op) && x.target) add(x.target);
+  if (!argv.length) return;
+  const name = path.posix.basename(argv[0].text);
+  const args = argv.slice(1);
+  const typed = cmd.words.map((w) => w.text);
+  if (INTERPRETERS.has(path.posix.basename(typed[0] ?? "")) && typed.some((t) => /^(-e|-c|-p|-i\S*|--eval|--print|-E)$/.test(t))) ctx.writes.push("*");
+  if (name === "dd") for (const a of args) if (a.text.startsWith("of=")) add({ ...a, text: a.text.slice(3) });
+  if (COPY_WRITERS.has(name) && name !== "dd") {
+    if ((name === "sed" || name === "perl") && !args.some((a) => /^(-i|--in-place)/.test(a.text))) return;
+    for (const a of args) if (!a.text.startsWith("-")) add(a);
+  }
+  if (OPAQUE_WRITERS.has(name)) ctx.writes.push("*");
+  if (name === "git" && args.some((a) => GIT_WRITING.has(a.text))) ctx.writes.push("*");
 }
 const ASSIGN_RE = /^([A-Za-z_][A-Za-z0-9_]*)\+?=(.*)$/s;
 const lit = (text) => ({ text, dynamic: false });
@@ -440,15 +582,26 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
   // `bash file`, `source file`, `./file.sh`: read and parse the file, except the runners
   // and the repo's own bin/ tooling (reviewed code, checked by its arguments instead).
   const nestFile = (w, mustExist) => {
+    r.guarded = true;
     if (w.dynamic) {
       r.indirect = "a script path built from variables or substitutions";
       return;
     }
-    const abs = path.resolve(ctx.cwd, w.text);
-    if (RUNNER_RE.test(path.basename(abs)) || abs.startsWith(TRUSTED_BIN)) return;
-    // Executed by path: missing = command not found; node/python/binaries are out of scope.
-    if (!mustExist && (!fs.existsSync(abs) || !isShellScript(abs))) return;
-    nestText(readScript(abs, ctx), `a script (${w.text})`);
+    const cands = candidates(w.text, ctx);
+    if (!cands) {
+      r.indirect = `a script (${w.text}) in a directory that cannot be determined`;
+      return;
+    }
+    ctx.execs.push(...cands);
+    const label = `a script (${w.text})`;
+    const existing = cands.filter((abs) => fs.existsSync(abs));
+    if (mustExist && !existing.length) return nestText(null, label);
+    for (const abs of existing) {
+      if (RUNNER_RE.test(path.basename(abs)) || abs.startsWith(TRUSTED_BIN)) continue;
+      // Executed by path: node/python/binaries are out of scope.
+      if (!mustExist && !isShellScript(abs)) continue;
+      nestText(readScript(abs, ctx), label);
+    }
   };
 
   for (let guard = 0; guard < 32 && words.length; guard++) {
@@ -476,7 +629,8 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
         }
         if (t === "-u" || t === "--unset" || t === "-C" || t === "--chdir") {
           words.shift();
-          words.shift();
+          const v = words.shift();
+          if (t === "-C" || t === "--chdir") changeDir(v, ctx);
         } else if (t.startsWith("-")) words.shift();
         else if (assignFrom(words[0])) words.shift();
         else {
@@ -486,7 +640,7 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
       }
       continue;
     }
-    if (["command", "builtin", "nohup", "time", "stdbuf", "sudo", "doas", "exec", "nice", "ionice", "chrt", "setsid", "unbuffer"].includes(name)) {
+    if (["command", "builtin", "nohup", "time", "stdbuf", "sudo", "doas", "exec", "nice", "ionice", "chrt", "setsid", "unbuffer", "corepack"].includes(name)) {
       words.shift();
       skipOpts(["-a", "-n", "-u", "-g", "-o", "-e", "-i", "-c", "-p"]);
       continue;
@@ -503,9 +657,9 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
       r.viaXargs = true;
       continue;
     }
-    if (name === "npx" || ((name === "pnpm" || name === "npm" || name === "yarn") && ["exec", "dlx", "x"].includes(words[1]?.text))) {
+    if (name === "npx" || name === "bunx" || (PACKAGE_MANAGERS.has(name) && ["exec", "dlx", "x"].includes(words[1]?.text))) {
       words.shift();
-      if (name !== "npx") words.shift();
+      if (name !== "npx" && name !== "bunx") words.shift();
       skipOpts(["-p", "--package", "-c"]);
       continue;
     }
@@ -534,8 +688,19 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
       if (words[1]) nestFile(words[1], true);
       break;
     }
+    if (name === "cd" || name === "pushd") {
+      changeDir(words.slice(1).find((w) => !/^-[LPe@]+$/.test(w.text)), ctx);
+      break;
+    }
+    if (name in { make: 1, gmake: 1, just: 1, task: 1 }) {
+      r.guarded = true;
+      const why = taskRunner(words, ctx);
+      if (why) r.indirect = why;
+      break;
+    }
     if (PACKAGE_MANAGERS.has(name)) {
       const run = packageScript(words, ctx);
+      r.guarded = !!run; // a package script ran (or could not be resolved)
       if (run?.indirect) r.indirect = run.indirect;
       else if (run) for (const [label, text] of run.scripts) nestText(text, label);
       break;
@@ -576,6 +741,7 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
     break;
   }
   r.argv = words;
+  recordWrites(cmd, words, ctx);
   return r;
 }
 
@@ -621,7 +787,7 @@ function gitRunsCommands(args) {
   const texts = args.map((a) => a.text);
   for (let i = 0; i < texts.length; i++) {
     if (texts[i] === "-c" && GIT_EXEC_KEY_RE.test(texts[i + 1] ?? "")) return true;
-    if (texts[i].startsWith("--config-env")) return true;
+    if (texts[i].startsWith("--config-env") || texts[i].startsWith("--exec-path=")) return true;
   }
   const cfg = texts.indexOf("config");
   return cfg !== -1 && texts.slice(cfg + 1).some((t) => GIT_EXEC_KEY_RE.test(t));
@@ -638,8 +804,9 @@ const isRunner = (w) => !w.dynamic && RUNNER_RE.test(base(w));
 function analyze(command, opts = {}) {
   const res = { error: null, commands: [], indirect: null, k6Load: false, prodLoad: { literalTrue: false, any: false }, runners: [], unsafeFlag: false };
   let commands;
+  const ctx = newContext(opts.cwd);
   try {
-    commands = resolveAll(parseShell(command), 0, newContext(opts.cwd));
+    commands = resolveAll(parseShell(command), 0, ctx);
   } catch (e) {
     if (!(e instanceof ShellParseError)) throw e;
     res.error = e.message;
@@ -648,10 +815,18 @@ function analyze(command, opts = {}) {
   res.commands = commands;
   const line = { runs: false, sources: false };
   const flag = (reason) => (res.indirect ??= reason);
+  // Any env assignment (PATH=..., export X=..., env X=...) earlier on the line can change
+  // what a guarded command runs, so it is refused before one.
+  let assigned = false;
+  const envAssign = (list) => list.some((a) => a.name.text !== "K6_ALLOW_PROD_LOAD");
 
   for (const r of commands) {
     if (r.indirect) flag(r.indirect);
     const decl = declarations(r);
+    if (envAssign(r.assigns)) assigned = true;
+    const guardedHead = r.argv[0] && !r.argv[0].dynamic && (isK6(r.argv[0]) || isRunner(r.argv[0]) || /^x?k6\s/.test(r.argv[0].text));
+    if (assigned && (r.guarded || guardedHead)) flag("an environment assignment before a test run, script or package script (it can change what runs)");
+    if (envAssign(decl.assigns)) assigned = true;
     if (decl.dynamic) flag("`export`/`declare` with a variable name");
     for (const a of [...r.assigns, ...decl.assigns]) {
       if (a.name.text === "K6_ALLOW_PROD_LOAD") {
@@ -691,6 +866,11 @@ function analyze(command, opts = {}) {
     }
   }
   if (line.runs && line.sources) flag("`source`/`.` on the same line as a test run");
+  // Write-then-run: the hook reads files before the line executes, so a file written on
+  // the same line may not be what runs.
+  const unknownWrite = ctx.writes.includes("*");
+  const hit = ctx.execs.find((e) => unknownWrite || ctx.writes.some((w) => e === w || e.startsWith(w + path.sep)));
+  if (hit) flag(`a command line that writes files and runs ${path.basename(hit)}; write the file in one command and run it in another`);
   return res;
 }
 

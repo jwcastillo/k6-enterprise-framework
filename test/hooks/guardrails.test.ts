@@ -66,8 +66,10 @@ describe("checkBash", () => {
 
   it("blocks the array-assignment + hex-escape bypass", () => {
     const hidden = "$'" + "\\x6b" + "\\x36" + " run x.js'";
-    expect(checkBash(`arr=(x); bash -c ${hidden}`, {})).toMatch(/run-test\.sh/);
-    expect(checkBash(`arr=(x); ${hidden}`, {})).toMatch(/run-test\.sh/);
+    // Denied as k6 load, or earlier as an assignment before a run — either way, denied.
+    expect(checkBash(`arr=(x); bash -c ${hidden}`, {})).toMatch(/run-test\.sh|environment assignment/);
+    expect(checkBash(`arr=(x); ${hidden}`, {})).toMatch(/run-test\.sh|environment assignment/);
+    expect(checkBash(`bash -c ${hidden}`, {})).toMatch(/run-test\.sh/);
   });
 
   it("parses array assignments and function definitions instead of failing", () => {

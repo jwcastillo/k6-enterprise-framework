@@ -176,6 +176,89 @@ describe("analyze", () => {
     expect(analyze("[ -f x ] && git log -1").indirect).toBeNull();
   });
 
+  // Second adversarial pass.
+  describe("second pass", () => {
+    const LOAD = ["k6", "run", "x.js"].join(" ");
+    let dir: string;
+    let evil: string;
+    beforeAll(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), "shell-guard2-"));
+      fs.writeFileSync(path.join(dir, "x.sh"), "echo benign\n");
+      fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ scripts: { test: "echo benign", load: LOAD } }));
+      fs.writeFileSync(path.join(dir, "Makefile"), "build:\n\techo ok\n");
+      evil = fs.mkdtempSync(path.join(os.tmpdir(), "shell-guard2-evil-"));
+      fs.writeFileSync(path.join(evil, "package.json"), JSON.stringify({ scripts: { test: LOAD } }));
+      fs.writeFileSync(path.join(evil, "Makefile"), `test:\n\t${LOAD}\n`);
+      fs.writeFileSync(path.join(evil, "justfile"), `test:\n  ${LOAD}\n`);
+    });
+    afterAll(() => {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(evil, { recursive: true, force: true });
+    });
+    const at = () => ({ cwd: dir });
+
+    it.each([
+      `printf '%s\\n' '${LOAD}' > x.sh && bash x.sh`,
+      `cat > x.sh <<'EOF'\n${LOAD}\nEOF\nbash x.sh`,
+      "cp /tmp/other.sh x.sh; ./x.sh",
+      "echo hi | tee x.sh; source x.sh",
+      "sed -i s/benign/other/ x.sh && sh x.sh",
+      `echo '{"scripts":{}}' > package.json && pnpm test`,
+      "git checkout other -- x.sh && bash x.sh",
+      "echo x > $F; bash x.sh",
+    ])("write-then-run is refused: %s", (cmd) => {
+      expect(analyze(cmd, at()).indirect).toMatch(/writes files and runs/);
+    });
+
+    it("allows writing files that are not run", () => {
+      const a = analyze("./bin/run-test.sh --scenario=api/x 2>&1 | tee reports/run.log", { cwd: ROOT });
+      expect(a.indirect).toBeNull();
+      expect(analyze("bash x.sh > out.log", at()).indirect).toBeNull();
+    });
+
+    it("tracks cd for package scripts and script files", () => {
+      expect(analyze(`cd ${evil} && pnpm test`, at()).k6Load).toBe(true);
+      expect(analyze(`pushd ${evil} && make test`, at()).indirect).toMatch(/mentions k6/);
+      expect(analyze(`env -C ${evil} pnpm test`, at()).k6Load).toBe(true);
+      for (const cmd of ["cd $D && pnpm test", "cd - && pnpm test", "cd ~nobody && bash x.sh", "cd * && pnpm test"]) {
+        expect(analyze(cmd, at()).indirect, cmd).toMatch(/cannot be determined/);
+      }
+    });
+
+    it("inspects corepack, bun, bunx, make, just and task", () => {
+      for (const cmd of ["corepack pnpm load", "bun run load", "bun load", "bunx --bun pnpm load", "corepack yarn run load"]) {
+        expect(analyze(cmd, at()).k6Load, cmd).toBe(true);
+      }
+      expect(analyze("make test", { cwd: evil }).indirect).toMatch(/make file that mentions k6/);
+      expect(analyze("just test", { cwd: evil }).indirect).toMatch(/just file that mentions k6/);
+      expect(analyze("task test", { cwd: evil }).indirect).toMatch(/cannot be read/);
+      expect(analyze("make -f $M", at()).indirect).toBeTruthy();
+      expect(analyze("make build", at()).indirect).toBeNull();
+    });
+
+    it("refuses any env assignment before a guarded command, not before others", () => {
+      for (const cmd of [
+        "PATH=/tmp/evil:$PATH ./bin/run-test.sh --scenario=api/x",
+        "export PATH=/tmp/evil; ./bin/run-test.sh --scenario=api/x",
+        "env npm_config_script_shell=/tmp/sh pnpm test",
+        "FOO=1 bash x.sh",
+        "NODE_OPTIONS=--x pnpm test",
+      ]) {
+        expect(analyze(cmd, at()).indirect, cmd).toMatch(/environment assignment/);
+      }
+      for (const cmd of ["FOO=1 echo hi", "CI=1 pnpm install", "export X=1; ls"]) {
+        expect(analyze(cmd, at()).indirect, cmd).toBeNull();
+      }
+    });
+
+    it("parses case ... esac and still sees commands in its branches", () => {
+      const a = analyze(`case "$1" in a|b) echo a;; (c) echo c ;; *) echo x;; esac; echo after`);
+      expect(a.error).toBeNull();
+      expect(a.indirect).toBeNull();
+      expect(analyze(`case x in a) ${LOAD};; esac`).k6Load).toBe(true);
+    });
+  });
+
   it("stays fast on large input", () => {
     const t0 = Date.now();
     analyze("echo 'x' && ".repeat(5000) + "true");
