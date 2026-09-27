@@ -8,6 +8,7 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 ## [Unreleased]
 
 ### Added
+- **Human approval for guarded runs** (`bin/approve-run.sh`, `bin/_run-guard.sh`, `bin/_run-approval.js`) — `run-test.sh`, `run-distributed.sh` and the exported standalone runner refuse a heavy profile, an env outside `nonProdEnvs`, an unlocked/gated scenario or production load with the new exit code `109` until a human creates a single-use, HMAC-signed approval in an interactive terminal. k6 is resolved from trusted directories only (`trustedBinDirs` in the client config), never through the caller's `PATH`, and runs without `NODE_OPTIONS`/`BASH_ENV`/`ENV`/`LD_PRELOAD`. **Breaking:** the runners no longer read `K6_BINARY_ALLOWED_PATHS`.
 - **Capacity search** (`bin/find-capacity.js`) — finds the highest sustainable arrival rate: exponential ramp, binary search, confirmation runs. A step fails on a crossed threshold, dropped iterations, or an achieved rate below 95% of the requested one; a broken script or environment aborts the search instead of being recorded as a limit. Refuses non-local targets without `--i-own-this-target`.
 - **Arrival-rate overrides** — `K6_ARRIVAL_RATE` and `K6_STEP_DURATION` replace the `rate` and `duration` of an arrival-rate profile and scale its VU pool. Unset, profiles behave exactly as declared.
 - **Gate self-test** (`bin/testing/gate-selftest.sh`) — proves end to end that the gates fail when they must: healthy target exits 0, 20% injected errors exits 99, 300ms injected latency exits 1 via the auto-comparison.

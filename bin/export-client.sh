@@ -433,7 +433,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo ""
 
   echo -e "  ${BOLD}Files to generate:${RESET}"
-  for f in package.json tsconfig.json webpack.config.js .eslintrc.json .gitignore bin/run-test.sh export-manifest.json; do
+  for f in package.json tsconfig.json webpack.config.js .eslintrc.json .gitignore bin/run-test.sh bin/approve-run.sh export-manifest.json; do
     echo -e "    ${f}"
   done
   [[ "${CI_PROVIDER}" == "github" ]] && echo -e "    .github/workflows/k6.yml"
@@ -962,11 +962,18 @@ cat > "${OUTPUT_DIR}/bin/run-test.sh" << 'RUNTEST'
 #   1   — Test error / framework error
 #   99  — k6 thresholds failed (tests ran but SLOs not met)
 #   107 — Script/build error (TypeScript compile, missing file, etc.)
+#   109 — Guarded run without a human approval (see bin/approve-run.sh)
+#
+# Guarded runs (gated scenario, K6_ALLOW_PROD_LOAD=true, env not in nonProdEnvs, heavy
+# profile) need a single-use approval a human creates with ./bin/approve-run.sh.
+# k6 is resolved from trusted dirs only (bin/_run-guard.sh), never the caller's PATH.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/_run-guard.sh"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 SCENARIO=""
@@ -1185,6 +1192,12 @@ log_info "Env:      ${BOLD}${ENV}${RESET}"
 log_info "Reports:  ${ARTIFACTS_DIR}"
 echo ""
 
+# ── Guarded runs need a human approval (exit 109) ─────────────────────────────
+# This runner has no gate unlock flags: any gated scenario counts as guarded.
+POLICY_FILE="$(rg_policy_file "${ROOT_DIR}")"
+rg_trusted_dirs "${POLICY_FILE}"
+rg_classify "$(rg_gate_kind "${SCENARIO_SRC}")" "${PROFILE}" "${ENV}" "${POLICY_FILE}"
+
 # ── Dry-run ───────────────────────────────────────────────────────────────────
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo -e "${BOLD}── Dry-run: execution plan ──${RESET}"
@@ -1193,9 +1206,18 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo -e "  Profile:  ${PROFILES_DIR}/${PROFILE}.json"
   echo -e "  Config:   ${CONFIG_FILE}"
   echo -e "  Artifacts: ${ARTIFACTS_DIR}"
+  if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+    echo -e "  Approval: required (exit 109 without one): $(IFS=';'; echo "${RG_REASONS[*]}")"
+  fi
   echo ""
   echo -e "${GREEN}No changes made (--dry-run)${RESET}"
   exit 0
+fi
+
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  log_warn "Guarded run: $(IFS=';'; echo "${RG_REASONS[*]}")"
+  rg_approval check "${ROOT_DIR}" "${CLIENT_NAME}" "${SCENARIO}" "${PROFILE}" "${ENV}" >/dev/null
+  log_success "Human approval found (consumed when k6 starts)"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1248,8 +1270,10 @@ log_step "Step ${STEP}/${TOTAL_STEPS} — Executing k6 test"
 PROFILE_JSON="${PROFILES_DIR}/${PROFILE}.json"
 PROFILE_SECS=$(profile_to_seconds "${PROFILE}")
 
-# Build k6 command
-K6_CMD=(k6 run)
+# Build k6 command — absolute k6 from a trusted dir, never the caller's PATH
+K6_BIN="$(rg_k6_binary)" || exit 1
+log_info "k6 binary: ${K6_BIN}"
+K6_CMD=("${K6_BIN}" run)
 
 # Add profile-based options if the scenario doesn't define its own
 K6_CMD+=(--summary-export="${SUMMARY_JSON}")
@@ -1273,11 +1297,20 @@ export K6_WEB_DASHBOARD=true
 export K6_WEB_DASHBOARD_EXPORT="${HTML_REPORT}"
 export K6_WEB_DASHBOARD_OPEN=false
 
+# Single-use human approval: consumed here, recorded with the run artifacts.
+APPROVAL_ID=""
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  APPROVAL_JSON="$(rg_approval consume "${ROOT_DIR}" "${CLIENT_NAME}" "${SCENARIO}" "${PROFILE}" "${ENV}")" || exit $?
+  [[ "${APPROVAL_JSON}" =~ \"id\":\"([0-9a-f]+)\" ]] && APPROVAL_ID="${BASH_REMATCH[1]}"
+  printf '%s\n' "${APPROVAL_JSON}" > "${ARTIFACTS_DIR}/approval-${ISO_TIMESTAMP}.json"
+  log_success "Approval ${APPROVAL_ID} consumed → approval-${ISO_TIMESTAMP}.json"
+fi
+
 # Execute with progress tracking
 PROGRESS_START=$(date +%s)
 K6_EXIT=0
 
-"${K6_CMD[@]}" 2>&1 | tee "${K6_LOG}" &
+/usr/bin/env "${RG_ENV_SCRUB[@]}" "${K6_CMD[@]}" 2>&1 | tee "${K6_LOG}" &
 K6_PID=$!
 
 # Progress bar while k6 runs
@@ -1341,6 +1374,7 @@ if [[ -f "${GENERATE_ARTIFACTS}" && -f "${SUMMARY_JSON}" ]]; then
     --timestamp="${ISO_TIMESTAMP}"
     --exit-code="${K6_EXIT}"
   )
+  [[ -n "${APPROVAL_ID}" ]] && _ARTIFACT_ARGS+=(--approval-id="${APPROVAL_ID}")
   [[ -f "${HTML_REPORT}" ]] && _ARTIFACT_ARGS+=(--html="${HTML_REPORT}")
   [[ -f "${COMPARISON_MD}" ]] && _ARTIFACT_ARGS+=(--comparison="${COMPARISON_MD}")
 
@@ -1411,6 +1445,13 @@ RUNTEST
 
 chmod +x "${OUTPUT_DIR}/bin/run-test.sh"
 log_success "Generated bin/run-test.sh (standalone)"
+
+# Run guard: trusted k6 resolution + human approval for guarded runs (exit 109).
+for f in _run-guard.sh _run-approval.js approve-run.sh; do
+  cp "${ROOT_DIR}/bin/${f}" "${OUTPUT_DIR}/bin/${f}"
+done
+chmod +x "${OUTPUT_DIR}/bin/approve-run.sh"
+log_success "Copied run guard (bin/_run-guard.sh, bin/_run-approval.js, bin/approve-run.sh)"
 
 # ── T-314: Copy update-framework.sh ──────────────────────────────────────────
 if [[ -f "${ROOT_DIR}/bin/update-framework.sh" ]]; then
@@ -1550,7 +1591,10 @@ Subagents in \`.claude/agents/\` (perf-test-architect, perf-scenario-author,
 perf-guardrail-reviewer, perf-load-operator, perf-results-analyst, perf-reporter, ...)
 coordinated by the \`perf-team\` skill. Smoke before load; every heavier, unsafe or
 production run needs explicit human confirmation. This runner has no \`--client\` flag
-and does not enforce scenario gates — agents check \`export const gate\` themselves.
+and no gate unlock flags: a gated scenario, a heavy profile, an env outside
+\`nonProdEnvs\` or production load is a guarded run and exits 109 until a human runs
+\`./bin/approve-run.sh\` in their own terminal. Agents stop and ask the human; they
+never run approve-run.sh themselves.
 
 ## Conventions
 - Scenarios: \`scenarios/{type}/{name}.ts\` (types: api, integration, browser, mixed)

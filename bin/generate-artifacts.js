@@ -17,7 +17,7 @@
 //     [--scenario=<name>] [--profile=<name>] [--env=<name>] [--client=<name>]
 //     [--run-id=<id>] [--run-label=<label>] [--timestamp=<ISO>]
 //     [--exit-code=<0|1|99>] [--comparison=<file>] [--story=<id>]
-//     [--story-url=<url>] [--help|-h]
+//     [--story-url=<url>] [--approval-id=<id>] [--help|-h]
 
 "use strict";
 
@@ -65,6 +65,10 @@ if (args.help === "true") {
       { flag: "--comparison=<file>", description: "Comparison markdown file" },
       { flag: "--story=<id>", description: "Jira/GitHub story ID" },
       { flag: "--story-url=<url>", description: "Jira/GitHub story URL" },
+      {
+        flag: "--approval-id=<id>",
+        description: "Human approval id (guarded runs), stored in the summary JSON",
+      },
       { flag: "--help, -h", description: "Show this help and exit" },
     ],
     examples: [
@@ -180,6 +184,8 @@ try {
     maxVus:
       (k6Summary.metrics && k6Summary.metrics.vus_max && k6Summary.metrics.vus_max.max) || null,
   });
+  // Guarded runs: id of the single-use human approval that authorised this run.
+  if (args["approval-id"]) enriched.approvalId = String(args["approval-id"]);
   fs.writeFileSync(args.input, JSON.stringify(enriched, null, 2));
   process.stderr.write("[OK] JSON enriched: " + args.input + "\n");
 } catch (e) {

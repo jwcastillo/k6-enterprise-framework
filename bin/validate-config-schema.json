@@ -40,6 +40,21 @@
       },
       "description": "Hostnames this client may fire load at. When set, bin/target-guard.js refuses any baseUrl whose host is not listed."
     },
+    "nonProdEnvs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+      "description": "Environments where non-heavy runs need no human approval. Default: default local dev development test testing qa ci sandbox staging stage uat. Any other env is a guarded run (bin/approve-run.sh)."
+    },
+    "heavyProfiles": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+      "description": "Profiles that always need a human approval (bin/approve-run.sh). Default: stress spike breakpoint soak capacity throughput-high throughput-ramp."
+    },
+    "trustedBinDirs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(/|~/)[A-Za-z0-9._/@+-]*$" },
+      "description": "Extra absolute directories (or ~/...) the runners may resolve k6 and node from, searched before /usr/local/bin /usr/bin /bin /opt/homebrew/bin. Group/world-writable directories are ignored."
+    },
     "maxVUs": {
       "type": "integer",
       "minimum": 1,
