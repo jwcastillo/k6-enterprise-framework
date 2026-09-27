@@ -218,6 +218,16 @@ describe("agent-bash-guard", () => {
     expect(decide("discoverer", "node bin/discover-flow.js --help").decision).toBe("allow");
   });
 
+  it("every profile denies the human-only approval tool", () => {
+    for (const profile of ["reviewer", "operator", "discoverer"]) {
+      for (const cmd of ["./bin/approve-run.sh --profile=load --env=production", "node bin/_run-approval.js approve", "bash -c 'bin/approve-run.sh'", "script -qc bin/approve-run.sh /dev/null"]) {
+        const d = decide(profile, cmd);
+        expect(d.decision, `${profile}: ${cmd}`).toBe("deny");
+        expect(d.reason).toMatch(/approvals are human-only/);
+      }
+    }
+  });
+
   it("unknown profiles fail closed", () => {
     expect(decide("nobody", "ls").decision).toBe("deny");
   });

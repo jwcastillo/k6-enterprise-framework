@@ -1589,8 +1589,9 @@ ${_SCENARIO_LIST}
   (add \`--env=<env>\` for config/<env>.json and \`--k6-env=KEY=VAL\` when init code reads
   paths from \`__ENV\`). Exit 0 pass, 1 fail. Run it before committing any scenario.
 - Hooks in \`.claude/settings.json\` (\`.claude/hooks/guardrails.js\`): block a bare
-  \`k6 run\` and \`--unsafe\`, block HAR/replay files on tracked paths, and run the gate
-  (\`--no-build\`) after every edit of a scenario.
+  \`k6 run\` and \`--unsafe\`, block any agent run of \`bin/approve-run.sh\` /
+  \`bin/_run-approval.js\` (approvals are human-only), block HAR/replay files on tracked
+  paths, and run the gate (\`--no-build\`) after every edit of a scenario.
 - Skill scan: \`./bin/scan-skills.sh\` (SkillSpector, baselines in \`security/baselines/\`).
 
 ## Agent team
@@ -2253,7 +2254,8 @@ This project includes Claude Code configuration for AI-assisted performance test
 ### Guardrails
 
 - `.claude/settings.json` registers the hooks in `.claude/hooks/guardrails.js`: a bare
-  `k6 run` and `--unsafe` are blocked (use `./bin/run-test.sh`), recorded traffic
+  `k6 run` and `--unsafe` are blocked (use `./bin/run-test.sh`), agents cannot run
+  `bin/approve-run.sh` / `bin/_run-approval.js` (approvals are human-only), recorded traffic
   (HAR/replay) cannot be written to tracked paths, and every edited scenario goes through
   the generation gate.
 - Generation gate: `node bin/validate-generated.js --kind=scenario scenarios/api/<name>.ts --strict`

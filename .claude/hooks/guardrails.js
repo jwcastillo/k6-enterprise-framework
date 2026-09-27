@@ -25,7 +25,7 @@ try {
 } catch {
   shellGuard = null;
 }
-const MENTIONS_GUARDED = /k6|run-test|run-distributed|run-regression|quick\.sh|find-capacity|--unsafe|K6_ALLOW_PROD_LOAD/i;
+const MENTIONS_GUARDED = /k6|run-test|run-distributed|run-regression|quick\.sh|find-capacity|--unsafe|K6_ALLOW_PROD_LOAD|approve-run|_run-approval/i;
 
 /** @returns {string|null} reason to deny, or null */
 function checkBash(command, env = process.env, guard = shellGuard, cwd = undefined) {
@@ -36,6 +36,8 @@ function checkBash(command, env = process.env, guard = shellGuard, cwd = undefin
   const a = guard.analyze(cmd, { cwd });
   // Fail closed on anything unparseable: escapes such as $'\x..' hide guarded words from a text match.
   if (a.error) return `Blocked: could not parse command (${a.error}); write it in a simpler form.`;
+  // Run approvals (bin/approve-run.sh) are a human decision; no opt-in unlocks them.
+  if (a.approval) return `Blocked: ${guard.APPROVAL_HINT}.`;
   if (a.indirect) return `Blocked: ${a.indirect} — ${guard.INDIRECTION_HINT}.`;
   // `k6 run` / `k6 cloud` straight from the shell skips target-guard, gating and reports.
   if (a.k6Load) {

@@ -16,6 +16,9 @@
 //               else is denied.
 //   discoverer  every discover-flow.js run asks the human to confirm the scope.
 //
+// Every profile denies running bin/approve-run.sh / bin/_run-approval.js in any form:
+// approvals are human-only.
+//
 // Output: exit 2 + stderr = block (reason goes back to the agent); JSON with
 // permissionDecision "ask" on stdout = force a human prompt; exit 0 silent = no opinion.
 // Internal errors fail closed (exit 2).
@@ -24,7 +27,7 @@
 
 "use strict";
 
-const { analyze, base, INDIRECTION_HINT } = require("./_shell-guard.js");
+const { analyze, base, INDIRECTION_HINT, APPROVAL_HINT, APPROVAL_RE } = require("./_shell-guard.js");
 
 const allow = () => ({ decision: "allow" });
 const deny = (reason) => ({ decision: "deny", reason });
@@ -168,8 +171,11 @@ function operator(a) {
 /** @returns {{decision: "allow"|"deny"|"ask", reason?: string}} */
 function decide(profile, command, cwd = undefined) {
   const cmd = String(command || "").trim();
-  if (profile === "reviewer") return reviewer(analyze(cmd, { cwd }));
-  if (profile === "operator") return operator(analyze(cmd, { cwd }));
+  // Every profile: run approvals are human-only (bin/approve-run.sh, bin/_run-approval.js).
+  const a = analyze(cmd, { cwd });
+  if (a.approval || (a.error && APPROVAL_RE.test(cmd))) return deny(APPROVAL_HINT);
+  if (profile === "reviewer") return reviewer(a);
+  if (profile === "operator") return operator(a);
   if (profile === "discoverer") {
     return /discover-flow\.js(?!.*--help\b)/.test(cmd)
       ? { decision: "ask", reason: "Confirm the discovery scope: URL, environment, allowed/blocked hosts, stop rules" }

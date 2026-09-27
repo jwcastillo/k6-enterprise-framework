@@ -98,6 +98,22 @@ describe("bin/export-client.sh --with-claude (_reference)", () => {
     expect(res.stderr).toContain("Run k6 through the runner");
   });
 
+  it("the exported hook and agent guard deny the human-only approval tool", () => {
+    for (const cmd of ["./bin/approve-run.sh --profile=load --env=production", "node bin/_run-approval.js approve"]) {
+      const res = spawnSync(process.execPath, [path.join(out, ".claude/hooks/guardrails.js"), "bash"], {
+        input: JSON.stringify({ tool_input: { command: cmd } }),
+        encoding: "utf8",
+      });
+      expect(res.status, cmd).toBe(2);
+      expect(res.stderr).toContain("approvals are human-only");
+      const guard = spawnSync(process.execPath, [path.join(out, "bin/agent-bash-guard.js"), "operator"], {
+        input: JSON.stringify({ tool_input: { command: cmd } }),
+        encoding: "utf8",
+      });
+      expect(guard.status, cmd).toBe(2);
+    }
+  });
+
   it("CLAUDE.md and README mention the gate and the hooks", () => {
     for (const f of [".claude/CLAUDE.md", "README.md"]) {
       const text = fs.readFileSync(path.join(out, f), "utf8");

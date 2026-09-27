@@ -850,15 +850,18 @@ function gitRunsCommands(args) {
 }
 
 const isK6 = (w) => !w.dynamic && /^x?k6$/.test(base(w));
+// The human-only approval tool (bin/approve-run.sh) and its backend (bin/_run-approval.js).
+const APPROVAL_RE = /(^|[^\w.-])(approve-run(\.sh)?|_run-approval(\.js)?)(?![\w-])/;
+const APPROVAL_HINT = "approvals are human-only: ask the user to run bin/approve-run.sh in their own terminal";
 const isRunner = (w) => !w.dynamic && RUNNER_RE.test(base(w));
 
 /**
  * Parse and classify a command line for the guards.
  * @returns {{error: string|null, commands: ReturnType<typeof resolve>[], indirect: string|null,
- *   k6Load: boolean, prodLoad: {literalTrue: boolean, any: boolean}, runners: ReturnType<typeof resolve>[], unsafeFlag: boolean}}
+ *   approval: boolean, k6Load: boolean, prodLoad: {literalTrue: boolean, any: boolean}, runners: ReturnType<typeof resolve>[], unsafeFlag: boolean}}
  */
 function analyze(command, opts = {}) {
-  const res = { error: null, commands: [], indirect: null, k6Load: false, prodLoad: { literalTrue: false, any: false }, runners: [], unsafeFlag: false };
+  const res = { error: null, commands: [], indirect: null, approval: false, k6Load: false, prodLoad: { literalTrue: false, any: false }, runners: [], unsafeFlag: false };
   let commands;
   const ctx = newContext(opts.cwd);
   try {
@@ -895,6 +898,11 @@ function analyze(command, opts = {}) {
     }
     const [head, ...args] = r.argv;
     if (!head) continue;
+    // Running the approval tool in any form (directly, via a shell, source, node, a pty
+    // wrapper such as script/expect/unbuffer, find -exec, interpreter code). Data tools
+    // that only read or mention it (cat, grep, git, gh, ...) are fine.
+    const dataOnly = !head.dynamic && DATA_TOOLS.has(base(head)) && !(base(head) === "find" && args.some((a) => /^-(exec|execdir|ok|okdir)$/.test(a.text)));
+    if (!dataOnly && r.argv.some((w) => APPROVAL_RE.test(w.text))) res.approval = true;
     if (head.dynamic) {
       flag("a command name built from a variable or substitution");
       continue;
@@ -940,4 +948,4 @@ function analyze(command, opts = {}) {
 
 const INDIRECTION_HINT = "indirection not allowed; write the command literally";
 
-module.exports = { DYN, INDIRECTION_HINT, analyze, parseShell, resolve, resolveAll, declarations, ShellParseError, base };
+module.exports = { DYN, INDIRECTION_HINT, APPROVAL_HINT, APPROVAL_RE, analyze, parseShell, resolve, resolveAll, declarations, ShellParseError, base };
