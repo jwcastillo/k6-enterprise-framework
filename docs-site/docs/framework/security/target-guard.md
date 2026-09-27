@@ -6,7 +6,8 @@ sidebar_position: 5
 
 Before k6 starts, `bin/run-test.sh` runs `bin/target-guard.js` against the resolved client
 config. When a check fails the run is refused, the reasons are printed and the script exits
-with code `107` — k6 never launches.
+with code `107` — k6 never launches. Production load also makes the run a guarded run that
+needs a human approval ([Run Approval](./run-approval.md), exit `109`).
 
 The guard is **not** bypassable with `--skip-validate`.
 

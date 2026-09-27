@@ -21,6 +21,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Human approval for guarded runs (bin/_run-guard.sh).
+# shellcheck source=bin/_run-guard.sh
+source "${SCRIPT_DIR}/_run-guard.sh"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CLIENT="${K6_CLIENT:-_reference}"
@@ -130,6 +133,8 @@ ${BOLD}── Exit codes ──────────────────�
   ${RED}1${RESET}    One or more pods failed or operator error
   ${YELLOW}99${RESET}   k6 thresholds failed (tests ran but SLOs not met)
   ${RED}107${RESET}  Pre-flight error (operator missing, image not found, etc.)
+  ${RED}109${RESET}  Guarded run (heavy profile, env not in nonProdEnvs, gated scenario,
+       production load) without a human approval: ./bin/approve-run.sh
 EOF
 }
 
@@ -184,6 +189,23 @@ if [[ -z "${IMAGE}" && "${BUILD_IMAGE}" == "false" ]]; then
   echo -e "  Example: --image=registry.example.com/k6-myapp:latest"
   echo -e "  Or:      --build --registry=registry.example.com/myapp"
   exit 107
+fi
+
+if [[ ! "${CLIENT}" =~ ^[A-Za-z0-9_-]+$ || ! "${SCENARIO}" =~ ^[A-Za-z0-9_/.-]+$ || "${SCENARIO}" == *".."* ]]; then
+  log_error "Invalid --client or --scenario"
+  exit 107
+fi
+
+# ── Guarded runs need a human approval (exit 109) ────────────────────────────
+# There are no gate unlock flags here: any gated scenario counts as guarded.
+CLIENT_DIR="${ROOT_DIR}/clients/${CLIENT}"
+POLICY_FILE="$(rg_policy_file "${CLIENT_DIR}")"
+rg_trusted_dirs "${POLICY_FILE}"
+rg_classify "$(rg_gate_kind "${CLIENT_DIR}/scenarios/${SCENARIO}.ts")" "${PROFILE}" "${ENV_NAME}" "${POLICY_FILE}"
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  log_warn "Guarded run: $(IFS=';'; echo "${RG_REASONS[*]}")"
+  rg_approval check "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV_NAME}" >/dev/null
+  log_success "Human approval found (consumed when the TestRun is applied)"
 fi
 
 # ── Pre-flight: check kubectl ─────────────────────────────────────────────────
@@ -394,6 +416,15 @@ YAML
 # Delete existing TestRun if present (idempotent)
 kubectl delete testrun "${TESTRUN_NAME}" --namespace="${NAMESPACE}" \
   --ignore-not-found=true &>/dev/null
+
+APPROVAL_ID=""
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  APPROVAL_JSON="$(rg_approval consume "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV_NAME}")" || exit $?
+  [[ "${APPROVAL_JSON}" =~ \"id\":\"([0-9a-f]+)\" ]] && APPROVAL_ID="${BASH_REMATCH[1]}"
+  mkdir -p "${REPORTS_DIR}/${CLIENT}/${SCENARIO_SLUG}"
+  printf '%s\n' "${APPROVAL_JSON}" > "${REPORTS_DIR}/${CLIENT}/${SCENARIO_SLUG}/approval-${ISO_TIMESTAMP}.json"
+  log_success "Approval ${APPROVAL_ID} consumed"
+fi
 
 echo "${TESTRUN_YAML}" | kubectl apply -f - &>/dev/null
 log_success "TestRun '${TESTRUN_NAME}' applied (parallelism=${PARALLELISM})"
@@ -648,6 +679,7 @@ const distributedMeta = {
   environment: '${ENV_NAME}',
   timestamp: '${ISO_TIMESTAMP}',
   podLogDir: '${POD_LOG_DIR}',
+  approvalId: '${APPROVAL_ID}' || null,
 };
 
 // Check if any pod produced a summary JSON (mounted via PVC or stdout)
@@ -677,6 +709,7 @@ console.log('Summary enriched with distributed metadata');
   echo "Scenario:     ${SCENARIO}"
   echo "Profile:      ${PROFILE}"
   echo "Environment:  ${ENV_NAME}"
+  [[ -n "${APPROVAL_ID}" ]] && echo "Approval:     ${APPROVAL_ID}"
   echo ""
   echo "Execution Mode: distributed"
   echo "Parallelism:    ${PARALLELISM} pods"

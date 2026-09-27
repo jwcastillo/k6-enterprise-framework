@@ -53,6 +53,7 @@ const sidebars: SidebarsConfig = {
       label: "Security",
       items: [
         "framework/security/security",
+        "framework/security/run-approval",
         "framework/security/security-audit-examples",
         "framework/security/security-permissions",
         "framework/security/compliance-checklist",

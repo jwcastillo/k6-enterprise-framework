@@ -26,6 +26,7 @@ full commit SHA, secrets only via the CI secret store, `timeout-minutes` set, no
 | 99 | fail: thresholds / regression gate (a real performance failure) |
 | 107 | fail: broken script, config or target guard (a pipeline defect) |
 | 108 | fail: gated scenario in CI; CI never passes `--unsafe` |
+| 109 | fail: guarded run (heavy profile, non-production-listed env, prod load) without a human approval; CI cannot approve, so it fails closed |
 | 1 | fail: framework error or critical regression |
 
 - PR pipelines: `smoke` or `quick` only, against non-production.

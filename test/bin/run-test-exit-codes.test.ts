@@ -93,10 +93,17 @@ beforeAll(() => {
   fs.writeFileSync(path.join(distDir, "exit-codes.js"), "export default function () {}\n");
 
   // realpathSync: en macOS /tmp es un symlink a /private/tmp, y el runner compara
-  // el binario resuelto con realpath contra K6_BINARY_ALLOWED_PATHS. Sin resolver,
+  // el binario resuelto con realpath contra trustedBinDirs. Sin resolver,
   // el allow-list no matchea y rebota con "not in a trusted directory".
   stubDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "k6stub-")));
   reportsDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "k6reports-")));
+  // El directorio del stub se declara confiable en la config del cliente (trustedBinDirs);
+  // el runner ya no lee K6_BINARY_ALLOWED_PATHS del entorno.
+  fs.mkdirSync(path.join(clientDir, "config"));
+  fs.writeFileSync(
+    path.join(clientDir, "config", "default.json"),
+    JSON.stringify({ client: clientName, trustedBinDirs: [stubDir] })
+  );
 });
 
 afterAll(() => {
@@ -127,7 +134,6 @@ function runWithStubK6(k6Exit: number) {
       env: {
         ...process.env,
         K6_BINARY_PATH: stub,
-        K6_BINARY_ALLOWED_PATHS: stubDir,
         // El runner falla cerrado sin rbac.json; aca no hay usuario que autorizar.
         K6_RBAC_PERMISSIVE: "true",
       },

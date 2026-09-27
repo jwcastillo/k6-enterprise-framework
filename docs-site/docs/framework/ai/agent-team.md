@@ -91,7 +91,7 @@ hide a command, and it denies anything it cannot parse.
 | `k6-scenario-authoring` | Buckets, aliases, goja-only imports, patterns, thresholds, tags, gate markers |
 | `flow-discovery` | Safe use of `discover-flow.js`, scoping, outputs, hand-off |
 | `guardrails-gate` | `validate-generated` kinds, common failures, secret scan |
-| `run-operations` | Runner flags, profiles, gates, exit codes 0/1/99/107/108, abort, capacity search |
+| `run-operations` | Runner flags, profiles, gates, exit codes 0/1/99/107/108/109, abort, capacity search |
 | `results-analysis` | Artifact map, compare/trend/SLO tools, deterministic-first rule, triage |
 | `k6-distributed-runs` | k6-operator Helm chart, parallelism, testid, data via Secret or init container |
 | `test-data-management` | SharedArray/DataPool, uniqueness across VUs and pods, generation, Redis, PII |

@@ -18,6 +18,8 @@
 #   1   — Test error / framework error / critical regression detected
 #   99  — k6 thresholds failed (tests ran but SLOs not met)
 #   107 — Script/build error (TypeScript compile, missing file, etc.)
+#   108 — Gated scenario without its unlock flag (--quarantined/--experimental/--unsafe)
+#   109 — Guarded run without a human approval (see bin/approve-run.sh)
 #
 # Artifacts per run (in reports/<client>/<scenario>/):
 #   html-report-<ISO>.html        — HTML dashboard
@@ -34,6 +36,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Trusted k6 resolution + human approval for guarded runs (bin/_run-guard.sh).
+# shellcheck source=bin/_run-guard.sh
+source "${SCRIPT_DIR}/_run-guard.sh"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CLIENT="${K6_CLIENT:-_reference}"
@@ -275,6 +280,15 @@ ${BOLD}── Gating (T-261) ─────────────────
   --quarantined          Allow running quarantined scenarios (exit 108 without)
   --experimental         Allow running experimental scenarios (exit 108 without)
   --unsafe               Allow running unsafe scenarios (exit 108 without)
+
+${BOLD}── Human approval ────────────────────────────────────────────────────────${RESET}
+  A guarded run (unlocked gate, K6_ALLOW_PROD_LOAD=true, env not in nonProdEnvs,
+  or a heavy profile: stress spike breakpoint soak capacity throughput-high
+  throughput-ramp) needs a single-use approval a human creates in a terminal:
+    ./bin/approve-run.sh --client=<c> --scenario=<s> --profile=<p> --env=<e>
+  Without one the run exits 109. Lists are configurable per client config
+  (nonProdEnvs, heavyProfiles). k6 is resolved from trusted dirs only
+  (/usr/local/bin /usr/bin /bin /opt/homebrew/bin + trustedBinDirs).
 
 ${BOLD}── Debug ─────────────────────────────────────────────────────────────────${RESET}
   --debug                Enable verbose debug logging (K6_DEBUG=true)
@@ -673,9 +687,8 @@ fi
 # ── T-261: GPT-inspired test gating ──────────────────────────────────────────
 # Prettier enforces double quotes (.prettierrc.json); pnpm lint:fix converts
 # single-quote gate markers, so the double-quote-only match is safe.
-GATE_MATCH=$(grep -m1 -oE 'export const gate = "(quarantined|experimental|unsafe)"' "${SCENARIO_SRC}" 2>/dev/null || true)
-if [[ -n "${GATE_MATCH}" ]]; then
-  GATE_KIND=$(echo "${GATE_MATCH}" | sed 's/.*"\(.*\)".*/\1/')
+GATE_KIND="$(rg_gate_kind "${SCENARIO_SRC}")"
+if [[ -n "${GATE_KIND}" ]]; then
   GATE_ALLOWED="false"
   case "${GATE_KIND}" in
     quarantined)  [[ "${ALLOW_QUARANTINED}" == "true" ]] && GATE_ALLOWED="true" ;;
@@ -687,6 +700,13 @@ if [[ -n "${GATE_MATCH}" ]]; then
     exit 108
   fi
 fi
+
+# ── Guarded runs need a human approval (exit 109); trusted binary dirs ───────
+# The unlock flags above and K6_ALLOW_PROD_LOAD are still required; an approval is an
+# additional requirement, never a substitute. Policy keys: see bin/_run-guard.sh.
+POLICY_FILE="$(rg_policy_file "${CLIENT_DIR}")"
+rg_trusted_dirs "${POLICY_FILE}"
+rg_classify "${GATE_KIND}" "${PROFILE}" "${ENV}" "${POLICY_FILE}"
 
 # ── Artifact paths — T-170: Human-readable ISO timestamps ────────────────────
 SCENARIO_SLUG="${SCENARIO//\//_}"
@@ -766,26 +786,16 @@ if [[ "${DEBUG}" == "true" ]]; then
 fi
 
 # ── Select k6 binary (T-137) ──────────────────────────────────────────────────
+# Never through the caller's PATH: trusted dirs only, executed by absolute path.
+# Without K6_BINARY_PATH, k6 is resolved at Step 3 (so --dry-run works without k6).
+K6_EXEC=""
 if [[ -n "${K6_BINARY_PATH:-}" ]]; then
   validate_input "K6_BINARY_PATH" "${K6_BINARY_PATH}" "${SAFE_PATH_RE}"
-  K6_BINARY_ALLOWED="${K6_BINARY_ALLOWED_PATHS:-/usr/local/bin:/usr/bin:/opt/k6:/opt/homebrew/bin:${ROOT_DIR}/dist/binaries}"
-  K6_BINARY_REAL="$(realpath "${K6_BINARY_PATH}" 2>/dev/null || echo "")"
-  K6_BINARY_TRUSTED=false
-  IFS=':' read -ra _BINARY_DIRS <<< "${K6_BINARY_ALLOWED}"
-  for _dir in "${_BINARY_DIRS[@]}"; do
-    if [[ "${K6_BINARY_REAL}" == "${_dir}"/* || "${K6_BINARY_REAL}" == "${_dir}" ]]; then
-      K6_BINARY_TRUSTED=true; break
-    fi
-  done
-  unset _BINARY_DIRS _dir
-  if [[ "${K6_BINARY_TRUSTED}" != "true" ]]; then
+  if ! K6_EXEC="$(rg_k6_binary /opt/k6 "${ROOT_DIR}/dist/binaries")"; then
     log_error "K6_BINARY_PATH '${K6_BINARY_PATH}' is not in a trusted directory"
     exit 1
   fi
-  K6_EXEC="${K6_BINARY_PATH}"
-  log_info "Using custom k6 binary: ${K6_BINARY_PATH}"
-else
-  K6_EXEC="k6"
+  log_info "Using custom k6 binary: ${K6_EXEC}"
 fi
 
 # ── T-148: Extensions management (xk6) ───────────────────────────────────────
@@ -927,6 +937,9 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   printf "  %-18s %s\n" "Environment:" "${ENV}"
   printf "  %-18s %s\n" "Reports dir:" "${REPORTS_DIR}"
   [[ -n "${EXTENSIONS}" ]] && printf "  %-18s %s\n" "Extensions:" "${EXTENSIONS}"
+  if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+    printf "  %-18s %s\n" "Approval:" "required (exit 109 without one): $(IFS=';'; echo "${RG_REASONS[*]}")"
+  fi
   echo -e "${DIM}  (--dry-run: no test executed, no artifacts generated)${RESET}"
   echo ""
   # If JSON/YAML, parse and show executor/vus/duration
@@ -950,6 +963,13 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   fi
   echo ""
   exit 0
+fi
+
+# Fail fast before building; the approval is consumed right before k6 starts.
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  log_warn "Guarded run: $(IFS=';'; echo "${RG_REASONS[*]}")"
+  rg_approval check "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV}" >/dev/null
+  log_success "Human approval found (consumed when k6 starts)"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1154,6 +1174,11 @@ unset _BACKEND_LIST _backend _bt
 RUN_LABEL_ARGS=()
 [[ -n "${RUN_LABEL}" ]] && RUN_LABEL_ARGS=(--tag "run_label=${RUN_LABEL}")
 
+if [[ -z "${K6_EXEC}" ]]; then
+  K6_EXEC="$(rg_k6_binary)" || exit 1
+fi
+log_info "k6 binary: ${K6_EXEC}"
+
 K6_CMD=(
   "${K6_EXEC}" run
   --env "K6_PROFILE=${PROFILE}"
@@ -1308,8 +1333,17 @@ if [[ -t 1 ]]; then
   _progress_pid=$!
 fi
 
+# Single-use human approval: consumed here, recorded with the run artifacts.
+APPROVAL_ID=""
+if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
+  APPROVAL_JSON="$(rg_approval consume "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV}")" || exit $?
+  [[ "${APPROVAL_JSON}" =~ \"id\":\"([0-9a-f]+)\" ]] && APPROVAL_ID="${BASH_REMATCH[1]}"
+  printf '%s\n' "${APPROVAL_JSON}" > "${ARTIFACTS_DIR}/approval-${ISO_TIMESTAMP}.json"
+  log_success "Approval ${APPROVAL_ID} consumed → approval-${ISO_TIMESTAMP}.json"
+fi
+
 K6_EXIT=0
-"${K6_CMD[@]}" 2>&1 || K6_EXIT=$?
+/usr/bin/env "${RG_ENV_SCRUB[@]}" "${K6_CMD[@]}" 2>&1 || K6_EXIT=$?
 
 # Stop progress ticker
 if [[ -n "${_progress_pid}" ]]; then
@@ -1455,6 +1489,7 @@ if [[ -f "${SUMMARY_JSON}" ]]; then
   [[ -n "${RUN_LABEL}" ]] && _ARTIFACT_ARGS+=(--run-label="${RUN_LABEL}")
   [[ -n "${STORY_ID}" ]] && _ARTIFACT_ARGS+=(--story="${STORY_ID}")
   [[ -n "${STORY_URL}" ]] && _ARTIFACT_ARGS+=(--story-url="${STORY_URL}")
+  [[ -n "${APPROVAL_ID}" ]] && _ARTIFACT_ARGS+=(--approval-id="${APPROVAL_ID}")
 
   _artifact_out=$(_run_timed "generate-artifacts" 120 "${_ARTIFACT_ARGS[@]}" 2>&1) && _artifact_exit=0 || _artifact_exit=$?
   while IFS= read -r line; do

@@ -19,6 +19,11 @@ example lives at `<repo>/infrastructure/k8s/k6-testrun.yaml`.
 - Secrets exist in the namespace (`kubectl get secret <name> -n <ns>`); never print
   their values.
 
+`run-distributed.sh` refuses a guarded run (heavy profile, env outside `nonProdEnvs`,
+gated scenario, production load) with exit `109` until a human creates a single-use
+approval with `bin/approve-run.sh` in their own terminal. Stop and ask for it; never run
+approve-run.sh or touch the approvals directory yourself.
+
 ## Key chart values
 
 | Value (section → key) | Meaning |

@@ -33,7 +33,12 @@ El script `bin/export-client.sh` extrae un solo cliente del monorepo y produce u
 - Una copia vendorizada del framework core (`framework/`)
 - Imports reescritos apuntando al directorio local `framework/`
 - Archivos de configuracion generados (`package.json`, `tsconfig.json`, `webpack.config.js`, etc.)
-- Un runner de tests standalone (`bin/run-test.sh`)
+- Un runner de tests standalone (`bin/run-test.sh`) con el guard de corridas
+  (`bin/_run-guard.sh`, `bin/_run-approval.js`, `bin/approve-run.sh`): k6 sale solo de
+  directorios confiables, y una corrida protegida (escenario con gate, perfil pesado, entorno
+  fuera de `nonProdEnvs`, carga en producción) sale con `109` hasta que una persona la
+  aprueba. Este runner no tiene flags de desbloqueo de gates. Ver
+  [Aprobación de corridas y k6 confiable](../security/run-approval.md).
 - Un script de actualizacion para traer nuevas versiones del framework (`bin/update-framework.sh`)
 
 El repositorio exportado funciona de forma independiente — los destinatarios solo necesitan `npm install && npm run build` para empezar.

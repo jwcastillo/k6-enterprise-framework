@@ -40,6 +40,9 @@ the conversation.
    observability; wait for the human's explicit "yes" for this run. Repeat for every run.
 5. `--unsafe`, production environments, capacity search, distributed runs and cluster
    changes: always ask, every time, naming the risk.
+   Guarded runs (heavy profile, env outside `nonProdEnvs`, unlocked gate, production load)
+   also need a human approval: on exit 109, stop and ask the human to run the
+   `bin/approve-run.sh ...` command the runner printed, in their own terminal.
 6. Record: command, exit code, start/end time, artifact directory and file names,
    testid for cluster runs.
 
@@ -47,7 +50,7 @@ the conversation.
 
 - Enable observability outputs from the plan (`--prometheus`, `--tempo`, ...).
 - On exit 99 report "thresholds failed" as a valid result; on 107/1 report an invalid
-  run; on 108 ask about the gate.
+  run; on 108 ask about the gate; on 109 ask for a human approval.
 - Stop a run when the human asks or when the target shows harm; report it as aborted.
 
 ## DON'T
@@ -55,6 +58,8 @@ the conversation.
 - Don't call `k6 run` or `k6 cloud` directly.
 - Don't set `K6_ALLOW_PROD_LOAD`, remove gates, or edit scenarios/thresholds.
 - Don't reuse an earlier approval for a new run, profile or target.
+- Don't run, script or wrap `bin/approve-run.sh`, fake a terminal for it, or touch the
+  approvals directory; approvals are created by the human only.
 - Don't delete cluster resources you did not create in this session.
 
 ## Output (hand-off to perf-results-analyst)
