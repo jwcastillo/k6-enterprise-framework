@@ -143,12 +143,29 @@ una shell también se parsean como comandos. Así se detecta `bash -c "..."` o u
 partido, mientras que un mensaje de commit o un `echo` que solo cita `k6 run` pasa. Una
 indirección denegada dice "indirection not allowed; write the command literally".
 
+También sigue lo que un comando delega:
+
+- Scripts de paquete: `pnpm <script>`, `pnpm run`, `npm run`/`npm test`, `yarn <script>`
+  se resuelven desde el `package.json` más cercano (hooks pre/post incluidos) y se parsean.
+  Un script que no se puede resolver, o una corrida sobre todo el workspace (`-r`,
+  `--filter`), se deniega.
+- Archivos de script: `bash|sh|zsh archivo`, `source`/`.` y `./archivo.sh` se leen (hasta
+  256 KiB, 16 archivos por comando) y se parsean; un archivo inexistente o imposible de
+  parsear se deniega. Los runners y las herramientas propias de `bin/` del repo se revisan
+  por sus argumentos, sin releerlos.
+- `watch`, `find -exec`, configuración de git que ejecuta programas (`-c core.pager=…`,
+  `alias.*`), variables como `BASH_ENV`/`GIT_PAGER`, nombres de comando con caracteres de
+  glob o llaves y `helm --post-renderer` cuentan como indirección.
+
 Los hooks fallan cerrado ante una violación detectada (exit `2`, el motivo vuelve al
-agente), ante un comando que no pueden parsear cuando menciona k6 o los runners, y cuando
-falta `bin/_shell-guard.js`. Fallan abierto ante sus propios errores internos, así un hook
-roto nunca traba una sesión. El hook es una barrera, no un sandbox: no lee archivos de
-script (`bash un-script.sh` se revisa como los argumentos de ese script) ni lo que hacen
-`node -e` / `python -c`.
+agente), ante **cualquier** comando que no pueden parsear ("could not parse command; write
+it in a simpler form" — escapes como `$'\x..'` pueden esconder una palabra protegida de
+una búsqueda de texto, así que no hay respaldo basado en texto), y cuando falta
+`bin/_shell-guard.js`. Las asignaciones de arrays y las definiciones de funciones se
+parsean; `case … esac` no, así que conviene pasar esos scripts a un archivo. Fallan
+abierto ante sus propios errores internos, así un hook roto nunca traba una sesión. El
+hook es una barrera, no un sandbox: no ve lo que hacen `node -e` / `python -c` ni un
+binario renombrado.
 
 ## Para repos de clientes
 

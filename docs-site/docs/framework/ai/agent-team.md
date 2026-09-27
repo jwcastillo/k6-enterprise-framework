@@ -62,8 +62,10 @@ hide a command, and it denies anything it cannot parse.
   `run-regression.sh`, `report.sh`, `compare.sh`, `run-distributed.sh`), read-only
   report tools, `helm template|status|list|get`, `kubectl get|describe|logs|top`,
   read-only git and `cat`/`ls`/`head`/`tail` under `reports/`. Heavy profiles,
-  `--unsafe`, production environments, capacity search, distributed runs and
-  helm/kubectl changes prompt the human. Raw `k6 run` / `k6 cloud`, any
+  `--unsafe`, any `--env` outside the known non-production names (default, local, dev,
+  test, qa, ci, sandbox, staging, stage, uat), a repeated `--profile`/`--env` (the runner
+  keeps the last), capacity search, distributed runs, helm/kubectl changes and
+  `--kubeconfig`/`--raw` prompt the human; `helm --post-renderer` is denied. Raw `k6 run` / `k6 cloud`, any
   `K6_ALLOW_PROD_LOAD` assignment, indirection and everything else are denied.
 - Discoverer: every discovery run prompts for scope confirmation.
 

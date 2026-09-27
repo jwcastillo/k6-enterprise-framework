@@ -145,12 +145,26 @@ parsed as commands too. So `bash -c "..."` or a split `k6" "run` is caught, whil
 message or `echo` that only quotes `k6 run` passes. A denied indirection says
 "indirection not allowed; write the command literally".
 
+It also follows what a command hands off to:
+
+- Package scripts: `pnpm <script>`, `pnpm run`, `npm run`/`npm test`, `yarn <script>`
+  are resolved from the nearest `package.json` (pre/post hooks included) and parsed.
+  A script that cannot be resolved, or a workspace-wide run (`-r`, `--filter`), is denied.
+- Script files: `bash|sh|zsh file`, `source`/`.` and `./file.sh` are read (up to 256 KiB,
+  16 files per command) and parsed; a missing or unparseable file is denied. The runners
+  and the repo's own `bin/` tooling are checked by their arguments, not re-read.
+- `watch`, `find -exec`, git config that runs programs (`-c core.pager=…`, `alias.*`),
+  variables such as `BASH_ENV`/`GIT_PAGER`, command names with glob or brace
+  characters and `helm --post-renderer` count as indirection.
+
 Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent),
-on a command they cannot parse when it mentions k6 or the runners, and when
-`bin/_shell-guard.js` is missing. They fail open on their own internal errors, so a
-broken hook never wedges a session. The hook is a guardrail, not a sandbox: it does not
-read script files (`bash some-script.sh` is checked as that script's arguments) or what
-`node -e` / `python -c` do.
+on **any** command they cannot parse ("could not parse command; write it in a simpler
+form" — escapes such as `$'\x..'` can hide a guarded word from a text match, so there is
+no text-based fallback), and when `bin/_shell-guard.js` is missing. Array assignments
+and function definitions parse; `case … esac` does not, so split such scripts into a
+file. Hooks fail open on their own internal errors, so a broken hook never wedges a
+session. The hook is a guardrail, not a sandbox: it does not see what `node -e` /
+`python -c` or a renamed binary do.
 
 ## For client repos
 

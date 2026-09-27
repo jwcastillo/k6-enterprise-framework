@@ -68,9 +68,11 @@ pueden esconder un comando, y deniega lo que no puede parsear.
   `run-regression.sh`, `report.sh`, `compare.sh`, `run-distributed.sh`), herramientas
   de reporte de solo lectura, `helm template|status|list|get`,
   `kubectl get|describe|logs|top`, git de solo lectura y `cat`/`ls`/`head`/`tail` bajo
-  `reports/`. Los perfiles pesados, `--unsafe`, entornos de producción, búsqueda de
-  capacidad, corridas distribuidas y cambios con helm/kubectl piden confirmación al
-  humano. `k6 run` / `k6 cloud` directos, cualquier asignación de `K6_ALLOW_PROD_LOAD`,
+  `reports/`. Los perfiles pesados, `--unsafe`, cualquier `--env` fuera de los nombres
+  no productivos conocidos (default, local, dev, test, qa, ci, sandbox, staging, stage,
+  uat), un `--profile`/`--env` repetido (el runner usa el último), búsqueda de
+  capacidad, corridas distribuidas, cambios con helm/kubectl y `--kubeconfig`/`--raw`
+  piden confirmación al humano; `helm --post-renderer` se deniega. `k6 run` / `k6 cloud` directos, cualquier asignación de `K6_ALLOW_PROD_LOAD`,
   la indirección y todo lo demás se deniegan.
 - Descubridor: cada descubrimiento pide confirmar el alcance.
 
