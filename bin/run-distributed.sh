@@ -418,6 +418,7 @@ kubectl delete testrun "${TESTRUN_NAME}" --namespace="${NAMESPACE}" \
   --ignore-not-found=true &>/dev/null
 
 APPROVAL_ID=""
+rg_classify_targets "${POLICY_FILE}" "${DIST_SCRIPT}"
 if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
   APPROVAL_JSON="$(rg_approval consume "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV_NAME}")" || exit $?
   [[ "${APPROVAL_JSON}" =~ \"id\":\"([0-9a-f]+)\" ]] && APPROVAL_ID="${BASH_REMATCH[1]}"

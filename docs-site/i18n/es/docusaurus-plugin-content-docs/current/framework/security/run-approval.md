@@ -21,6 +21,7 @@ Una corrida está **protegida** cuando se cumple cualquiera de estas condiciones
 | `K6_ALLOW_PROD_LOAD=true` | — |
 | `--env` no está en `nonProdEnvs` (sin distinguir mayúsculas) | `default local dev development test testing qa ci sandbox staging stage uat` |
 | `--profile` está en `heavyProfiles` | `stress spike breakpoint soak capacity throughput-high throughput-ramp` |
+| Un host de `productionHosts` (sin distinguir mayúsculas) aparece en el escenario compilado o en el valor de una variable de entorno, diga lo que diga `--env`. Se revisa después del build, justo antes de arrancar k6; un host en un comentario también cuenta. | — (sin chequeo) |
 
 Smoke, quick y load sobre un entorno no productivo siguen sin fricción: no piden aprobación.
 
@@ -32,6 +33,7 @@ reemplaza su valor por defecto:
 {
   "nonProdEnvs": ["default", "dev", "staging", "perf-lab"],
   "heavyProfiles": ["stress", "spike", "breakpoint", "soak", "capacity"],
+  "productionHosts": ["api.example.com", "www.example.com"],
   "trustedBinDirs": ["~/.local/bin"]
 }
 ```

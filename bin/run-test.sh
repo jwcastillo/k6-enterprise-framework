@@ -1335,6 +1335,7 @@ fi
 
 # Single-use human approval: consumed here, recorded with the run artifacts.
 APPROVAL_ID=""
+rg_classify_targets "${POLICY_FILE}" "${DIST_SCRIPT}"
 if [[ ${#RG_REASONS[@]} -gt 0 ]]; then
   APPROVAL_JSON="$(rg_approval consume "${ROOT_DIR}" "${CLIENT}" "${SCENARIO}" "${PROFILE}" "${ENV}")" || exit $?
   [[ "${APPROVAL_JSON}" =~ \"id\":\"([0-9a-f]+)\" ]] && APPROVAL_ID="${BASH_REMATCH[1]}"

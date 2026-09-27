@@ -10,7 +10,8 @@
 #      the dynamic-loader variables removed.
 #   2. Guarded runs. A run is guarded when a scenario gate is unlocked, K6_ALLOW_PROD_LOAD
 #      is true, the env is not in "nonProdEnvs" or the profile is in "heavyProfiles"
-#      (client config keys; defaults below). A guarded run needs a single-use approval
+#      (client config keys; defaults below), or a host in "productionHosts" appears in the
+#      built scenario or an env var value (rg_classify_targets). A guarded run needs a single-use approval
 #      a human creates with bin/approve-run.sh; without one the runner exits 109.
 #
 # Config lists are read with bash builtins only (the file is the client's default.json
@@ -170,6 +171,28 @@ rg_classify() {
   list="$(rg_config_list "${policy}" heavyProfiles)" || list="${RG_HEAVY_DEFAULT}"
   # shellcheck disable=SC2086
   _rg_in_list "${profile}" ${list} && RG_REASONS+=("profile '${profile}' is heavy")
+  return 0
+}
+
+# rg_classify_targets <policy file> <bundle .js> — adds a reason to RG_REASONS when a host
+# listed in the client config key "productionHosts" appears in the built scenario or in an
+# environment variable's value, whatever the env name says (scenarios often hard-code a
+# production default that an env var overrides). Call after the build, right before
+# rg_approval consume. A host mentioned only in a comment still counts: fail closed.
+rg_classify_targets() {
+  local policy="$1" bundle="$2" host name content="" hits="" hosts nocase
+  hosts="$(rg_config_list "${policy}" productionHosts)" || return 0
+  [[ -f "${bundle}" ]] && content="$(<"${bundle}")"
+  nocase="$(shopt -p nocasematch || true)"
+  shopt -s nocasematch
+  for host in ${hosts}; do
+    if [[ "${content}" == *"${host}"* ]]; then hits+=" ${host} (bundle)"; continue; fi
+    while IFS= read -r name; do
+      if [[ "${!name-}" == *"${host}"* ]]; then hits+=" ${host} (\$${name})"; break; fi
+    done < <(compgen -e)
+  done
+  eval "${nocase}"
+  [[ -n "${hits}" ]] && RG_REASONS+=("production host targeted:${hits}")
   return 0
 }
 

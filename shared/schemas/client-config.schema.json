@@ -34,6 +34,11 @@
       "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
       "description": "Environments where non-heavy runs need no human approval. Default: default local dev development test testing qa ci sandbox staging stage uat. Any other env is a guarded run (bin/approve-run.sh)."
     },
+    "productionHosts": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+      "description": "Production hostnames. A run whose built scenario or environment variables mention one is a guarded run (bin/approve-run.sh), whatever --env says."
+    },
     "heavyProfiles": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
