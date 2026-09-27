@@ -153,18 +153,38 @@ It also follows what a command hands off to:
 - Script files: `bash|sh|zsh file`, `source`/`.` and `./file.sh` are read (up to 256 KiB,
   16 files per command) and parsed; a missing or unparseable file is denied. The runners
   and the repo's own `bin/` tooling are checked by their arguments, not re-read.
-- `watch`, `find -exec`, git config that runs programs (`-c core.pager=…`, `alias.*`),
-  variables such as `BASH_ENV`/`GIT_PAGER`, command names with glob or brace
-  characters and `helm --post-renderer` count as indirection.
+- `corepack`, `bun run`/`bun <script>` and `bunx` are resolved like pnpm/npx. For
+  `make`, `just` and `task` the task file is read and the call is denied when the file
+  mentions k6, the runners or the unsafe/prod-load switches, or cannot be read.
+- `cd`/`pushd`/`env -C` with a literal target add that directory to the ones scripts are
+  resolved from (the previous one stays, in case the `cd` runs in a subshell or fails);
+  a target that cannot be known (a variable, `-`, `~user`, a glob) makes any later script
+  resolution a denial.
+- Write-then-run: a line that writes a file (`>`, `tee`, `cp`, `mv`, `sed -i`, `dd of=`,
+  heredoc into a file, ...) and runs that file, a script next to it, or a
+  `package.json`/Makefile it rewrote is denied, because the hook reads files before the
+  line runs. Writers whose target is unknown (`curl -o`, `git checkout`, `node -e`, a
+  variable target, ...) count as writing anything.
+- Any environment assignment (`VAR=… cmd`, `env VAR=…`, `export VAR=…`) earlier on the
+  line than k6, a runner, a package script or a script file is denied: `PATH=…` or
+  `npm_config_script_shell=…` would change what runs. Assignments before other commands
+  are fine.
+- `watch`, `find -exec`, git config that runs programs (`-c core.pager=…`, `alias.*`,
+  `--exec-path=`), variables such as `BASH_ENV`/`GIT_PAGER`, command names with glob or
+  brace characters and `helm --post-renderer` count as indirection.
 
 Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent),
 on **any** command they cannot parse ("could not parse command; write it in a simpler
 form" — escapes such as `$'\x..'` can hide a guarded word from a text match, so there is
-no text-based fallback), and when `bin/_shell-guard.js` is missing. Array assignments
-and function definitions parse; `case … esac` does not, so split such scripts into a
-file. Hooks fail open on their own internal errors, so a broken hook never wedges a
-session. The hook is a guardrail, not a sandbox: it does not see what `node -e` /
-`python -c` or a renamed binary do.
+no text-based fallback), and when `bin/_shell-guard.js` is missing. Array assignments,
+function definitions and `case … esac` parse. Hooks fail open on their own internal
+errors, so a broken hook never wedges a session.
+
+The hook is best-effort defense in depth, not a sandbox. It cannot see what `node -e` /
+`python -c`, a renamed binary or a program started by a make recipe does, and a
+determined agent with shell access can find other paths. The enforcement boundary is the
+runner's own approval check (added in a separate change): the hook exists to catch
+mistakes and obvious bypasses early, with a clear message.
 
 ## For client repos
 
