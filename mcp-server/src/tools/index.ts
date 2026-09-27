@@ -14,6 +14,7 @@ import {
   validateClientExists,
   sanitizeArg,
   runCliCommand,
+  cliTimeoutMs,
   mcpError,
   formatError,
 } from "../utils/framework.js";
@@ -63,7 +64,8 @@ export function runTest(params: RunTestParams): RunTestResult {
       const runTestSh = join(BIN_DIR, "run-test.sh");
       const cmd = `bash "${runTestSh}" --client="${safeClient}" --scenario="${safeTest}" --profile="${safeProfile}" --env="${safeEnv}"`;
 
-      const { stdout, stderr, exitCode } = runCliCommand(cmd, FRAMEWORK_ROOT);
+      // Load tests can run for hours: no timeout unless K6_MCP_CMD_TIMEOUT_MS is set.
+      const { stdout, stderr, exitCode } = runCliCommand(cmd, FRAMEWORK_ROOT, cliTimeoutMs());
       const output = stdout + (stderr ? `\n[stderr]\n${stderr}` : "");
 
       // Try to find the generated report

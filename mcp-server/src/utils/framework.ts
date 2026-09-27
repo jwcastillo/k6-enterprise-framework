@@ -88,21 +88,29 @@ export function globTs(dir: string): string[] {
 
 // ── CLI command execution ─────────────────────────────────────────────────────
 
+/** Default timeout for CLI commands (scaffolding, validators): 300 s. */
+export const DEFAULT_CLI_TIMEOUT_MS = 300_000;
+
 /**
- * Timeout for CLI commands (run_test runs real load tests that can last hours).
- * K6_MCP_CMD_TIMEOUT_MS overrides it; unset or 0 means no timeout.
+ * Timeout for run_test only: real load tests can last hours. K6_MCP_CMD_TIMEOUT_MS
+ * overrides it; unset or 0 means no timeout (null).
  */
-export function cliTimeoutMs(env: NodeJS.ProcessEnv = process.env): number | undefined {
+export function cliTimeoutMs(env: NodeJS.ProcessEnv = process.env): number | null {
   const ms = Number(env.K6_MCP_CMD_TIMEOUT_MS ?? 0);
-  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
 }
 
-export function runCliCommand(cmd: string, cwd = FRAMEWORK_ROOT): { stdout: string; stderr: string; exitCode: number } {
+/** timeoutMs: null = no timeout. On timeout the child is killed and a non-zero exitCode returned. */
+export function runCliCommand(
+  cmd: string,
+  cwd = FRAMEWORK_ROOT,
+  timeoutMs: number | null = DEFAULT_CLI_TIMEOUT_MS
+): { stdout: string; stderr: string; exitCode: number } {
   try {
     const stdout = execSync(cmd, {
       cwd,
       encoding: "utf-8",
-      timeout: cliTimeoutMs(),
+      timeout: timeoutMs ?? undefined,
       // Load-test output can be large; the default 1 MiB buffer would kill the child.
       maxBuffer: 256 * 1024 * 1024,
     });

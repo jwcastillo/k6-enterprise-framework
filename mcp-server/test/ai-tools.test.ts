@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { getTestHistory } from "../src/tools/ai-tools.js";
-import { FRAMEWORK_ROOT, cliTimeoutMs } from "../src/utils/framework.js";
+import { FRAMEWORK_ROOT, DEFAULT_CLI_TIMEOUT_MS, cliTimeoutMs, runCliCommand } from "../src/utils/framework.js";
 
 const CLIENT = "_test-mcp-history";
 const clientDir = join(FRAMEWORK_ROOT, "reports", CLIENT);
@@ -50,10 +50,33 @@ describe("get_test_history", () => {
   });
 });
 
-describe("cliTimeoutMs", () => {
+describe("get_test_history path validation", () => {
+  it.each(["..", "../..", "_reference/..", "a/b"])("rejects client %s (path traversal)", (client) => {
+    expect(() => getTestHistory({ client })).toThrow(/Invalid client name/);
+  });
+
+  it("rejects .. segments in the test path", () => {
+    expect(() => getTestHistory({ client: CLIENT, test: ".." })).toThrow(/Invalid test path/);
+  });
+});
+
+describe("runCliCommand timeouts", () => {
+  it("has a 300 s default for ordinary commands", () => {
+    expect(DEFAULT_CLI_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it("kills a command that exceeds its timeout", () => {
+    const t0 = Date.now();
+    const res = runCliCommand("sleep 5", FRAMEWORK_ROOT, 200);
+    expect(res.exitCode).not.toBe(0);
+    expect(Date.now() - t0).toBeLessThan(4000);
+  });
+});
+
+describe("cliTimeoutMs (run_test)", () => {
   it("defaults to no timeout so long load tests are not killed", () => {
-    expect(cliTimeoutMs({})).toBeUndefined();
-    expect(cliTimeoutMs({ K6_MCP_CMD_TIMEOUT_MS: "0" })).toBeUndefined();
+    expect(cliTimeoutMs({})).toBeNull();
+    expect(cliTimeoutMs({ K6_MCP_CMD_TIMEOUT_MS: "0" })).toBeNull();
   });
 
   it("honours K6_MCP_CMD_TIMEOUT_MS", () => {
