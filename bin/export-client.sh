@@ -936,9 +936,16 @@ GITIGNORE
 log_success "Generated .gitignore"
 
 # ── .tool-versions (asdf) ────────────────────────────────────────────────────
-cat > "${OUTPUT_DIR}/.tool-versions" << 'TOOLVERSIONS'
-nodejs lts
-TOOLVERSIONS
+# asdf needs exact versions ("lts" is not one): mirror the monorepo's pins. golang
+# only matters for the binary builder.
+TOOL_RE='^(nodejs|pnpm)[[:space:]]'
+[[ "${WITH_BINARY}" == "true" ]] && TOOL_RE='^(nodejs|pnpm|golang)[[:space:]]'
+if [[ -f "${ROOT_DIR}/.tool-versions" ]]; then
+  grep -E "${TOOL_RE}" "${ROOT_DIR}/.tool-versions" > "${OUTPUT_DIR}/.tool-versions" || true
+fi
+if ! grep -qE '^nodejs[[:space:]]' "${OUTPUT_DIR}/.tool-versions" 2>/dev/null; then
+  echo "nodejs $(node -v | sed 's/^v//')" >> "${OUTPUT_DIR}/.tool-versions"
+fi
 log_success "Generated .tool-versions"
 
 # ── T-308: bin/run-test.sh standalone ────────────────────────────────────────
@@ -2144,7 +2151,7 @@ chmod +x ./k6-<client>
 
 BINARYEOF
   # Replace <client> with actual client name in the binary section
-  sed -i '' "s|k6-<client>|k6-${CLIENT}|g" "${OUTPUT_DIR}/README.md"
+  sed -i.bak "s|k6-<client>|k6-${CLIENT}|g" "${OUTPUT_DIR}/README.md" && rm -f "${OUTPUT_DIR}/README.md.bak"
 fi
 
 if [[ "${WITH_MCP}" == "true" ]]; then
