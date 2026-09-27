@@ -259,6 +259,99 @@ describe("analyze", () => {
     });
   });
 
+  // Third adversarial pass.
+  describe("third pass", () => {
+    const K = "k6";
+    let dir: string;
+    beforeAll(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), "shell-guard3-"));
+      for (const f of ["x.sh", "xaa", "xx00", "pfx00"]) fs.writeFileSync(path.join(dir, f), "echo benign\n");
+    });
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it.each([
+      `docker run --rm grafana/${K} run - < x.js`,
+      `docker run --rm -v $PWD:/s img ${K} run /s/x.js`,
+      `kubectl run t --image=busybox -- ${K} run x.js`,
+      `kubectl run t --image=grafana/${K}:latest`,
+      `kubectl exec pod-1 -- ${K} run x.js`,
+      `ssh host ${K} run x.js`,
+      `ssh host ./bin/run-test.sh --scenario=api/x`,
+      `vim -c '!${K} run x.js' -c q`,
+      `less +'!${K} run x.js' README.md`,
+      `awk 'BEGIN{system("${K} run x.js")}'`,
+      `tclsh -c 'exec ${K} run x.js'`,
+      `perl -e 'system("${K} run x.js")'`,
+      `python3 -c "import os; os.system('${K} run x.js')"`,
+      `ruby -e 'system("${K} cloud x.js")'`,
+      `php -r 'system("${K} run x.js");'`,
+      `lua -e 'os.execute("${K} run x.js")'`,
+      `deno eval 'new Deno.Command("${K}")'`,
+      `node -e 'require("child_process").execSync("${K} run x.js")'`,
+      `python3 -c "import subprocess; subprocess.run(['./bin/run-test.sh', '--unsafe'])"`,
+    ])("k6 inside another program's arguments is refused: %s", (cmd) => {
+      expect(analyze(cmd).indirect).toMatch(/inside the arguments of/);
+    });
+
+    it.each([
+      `git commit -m "fix: ${K} run docs"`,
+      `echo "use ./bin/run-test.sh, not ${K} run"`,
+      `grep -rn "${K} run" docs`,
+      `rg '${K} (run|cloud)' bin`,
+      `sed -n '/${K} run/p' README.md`,
+      "cat bin/run-test.sh",
+      "shellcheck bin/run-test.sh",
+      "ls ~/.k6 dist/k6-embedded",
+      "pnpm test test/bin/run-test-exit-codes.test.ts",
+      `helm status ${K} -n ${K}-tests`,
+      `kubectl get testrun ${K}-load-test -n ${K}-tests`,
+    ])("plain mentions in data tools stay allowed: %s", (cmd) => {
+      expect(analyze(cmd, { cwd: ROOT }).indirect).toBeNull();
+    });
+
+    it.each([
+      "openssl enc -d -in p.enc -out x.sh -k s && bash x.sh",
+      "openssl enc -d -in p.enc -out=x.sh && bash x.sh",
+      "printf x | sponge x.sh && bash x.sh",
+      "split -b 1000000 in.sh && bash xaa",
+      "split -l 5 in.sh pfx && bash pfx00",
+      "csplit in.sh /---/ && bash xx00",
+      "csplit -f pfx in.sh /---/ && bash pfx00",
+      "exec 3>x.sh; bash x.sh",
+      "echo x >| x.sh; bash x.sh",
+      "echo x &> x.sh; bash x.sh",
+      "echo x >&x.sh; bash x.sh",
+    ])("more writers are tracked: %s", (cmd) => {
+      expect(analyze(cmd, { cwd: dir }).indirect).toMatch(/writes files and runs/);
+    });
+
+    it("unknown writes do not taint the runners or repo bin/, direct writes to them still do", () => {
+      for (const cmd of ["git pull && ./bin/run-test.sh --profile=smoke --scenario=api/x", "curl -sO https://example.com/f && bash bin/detect-secrets.sh src"]) {
+        expect(analyze(cmd, { cwd: ROOT }).indirect, cmd).toBeNull();
+      }
+      expect(analyze("cp /tmp/x bin/run-test.sh && ./bin/run-test.sh --scenario=api/x", { cwd: ROOT }).indirect).toMatch(/writes files and runs/);
+      expect(analyze("git pull && bash x.sh", { cwd: dir }).indirect).toMatch(/writes files and runs/);
+    });
+
+    it("allows inert env names before guarded commands, not the ones that change what runs", () => {
+      for (const cmd of ["K6_DEBUG=1 ./bin/run-test.sh --scenario=api/x", "NODE_ENV=test pnpm test", "CI=1 FORCE_COLOR=0 LC_ALL=C pnpm lint", "TZ=UTC K6_PROFILE=smoke ./bin/run-test.sh --scenario=api/x"]) {
+        expect(analyze(cmd, { cwd: ROOT }).indirect, cmd).toBeNull();
+      }
+      for (const cmd of [
+        "K6_BINARY_PATH=/tmp/k ./bin/run-test.sh --scenario=api/x",
+        "K6_SKIP_VALIDATE=1 ./bin/run-test.sh --scenario=api/x",
+        "PATH=/tmp:$PATH ./bin/run-test.sh --scenario=api/x",
+        "NODE_OPTIONS=--require=/tmp/x.js pnpm test",
+        "npm_config_script_shell=/tmp/sh pnpm test",
+        "SHELL=/tmp/sh pnpm test",
+        "GIT_DIR=/tmp pnpm test",
+        "LD_PRELOAD=/tmp/x.so ./bin/run-test.sh --scenario=api/x",
+      ]) {
+        expect(analyze(cmd, { cwd: ROOT }).indirect, cmd).toBeTruthy();
+      }
+    });
+  });
+
   it("stays fast on large input", () => {
     const t0 = Date.now();
     analyze("echo 'x' && ".repeat(5000) + "true");

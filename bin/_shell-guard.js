@@ -357,7 +357,7 @@ const TRUSTED_BIN = path.resolve(__dirname) + path.sep;
  * the line writes and runs as scripts ("*" = some unknown write).
  */
 function newContext(cwd = process.cwd()) {
-  return { dirs: [path.resolve(cwd)], cwdUnknown: false, filesRead: 0, writes: [], execs: [] };
+  return { dirs: [path.resolve(cwd)], cwdUnknown: false, filesRead: 0, writes: [], prefixWrites: [], execs: [], trustedExecs: [] };
 }
 
 /** Absolute candidates for a path word, or null when the cwd cannot be known. */
@@ -506,24 +506,56 @@ function taskRunner(words, ctx) {
   return null;
 }
 
-const OUT_REDIRECTS = new Set([">", ">>", "&>", "&>>", ">|", "<>"]);
-const COPY_WRITERS = new Set(["tee", "cp", "mv", "install", "ln", "rsync", "truncate", "dd", "sed", "perl"]);
-const OPAQUE_WRITERS = new Set(["curl", "wget", "patch", "tar", "unzip", "gunzip", "bunzip2", "xz", "unxz", "7z", "scp", "sftp"]);
+const OUT_REDIRECTS = new Set([">", ">>", "&>", "&>>", ">|", "<>", ">&"]);
+const COPY_WRITERS = new Set(["tee", "sponge", "cp", "mv", "install", "ln", "rsync", "truncate", "dd", "sed", "perl"]);
+const OPAQUE_WRITERS = new Set([
+  "curl", "wget", "patch", "tar", "unzip", "gunzip", "bunzip2", "xz", "unxz", "7z", "scp", "sftp", "awk", "gawk", "mawk",
+  "uudecode", "gpg", "age",
+]);
+// split/csplit write <prefix><suffix> files: value-taking flags, default prefix.
+const SPLITTERS = {
+  split: { values: ["-a", "-b", "-C", "-l", "-n", "-t", "--additional-suffix", "--filter"], prefix: "x", prefixFlag: null },
+  csplit: { values: ["-b", "-f", "-n"], prefix: "xx", prefixFlag: "-f" },
+};
 const GIT_WRITING = new Set(["checkout", "restore", "switch", "reset", "apply", "am", "pull", "merge", "rebase", "cherry-pick", "revert", "stash", "clone", "worktree", "mv", "rm"]);
 const INTERPRETERS = new Set(["node", "python", "python3", "perl", "ruby", "deno", "bun", "php", "lua"]);
 
 /** Record what a command writes (for the write-then-run check). */
 function recordWrites(cmd, argv, ctx) {
-  const add = (w) => {
+  const add = (w, prefix = false) => {
     const c = w.dynamic ? null : candidates(w.text, ctx);
     if (!c) ctx.writes.push("*");
-    else ctx.writes.push(...c.filter((p) => !p.startsWith("/dev/")));
+    else (prefix ? ctx.prefixWrites : ctx.writes).push(...c.filter((p) => !p.startsWith("/dev/")));
   };
-  for (const x of cmd.redirects) if (OUT_REDIRECTS.has(x.op) && x.target) add(x.target);
+  for (const x of cmd.redirects) {
+    if (!OUT_REDIRECTS.has(x.op) || !x.target || /^(\d+|-)$/.test(x.target.text)) continue; // >&2, >&- are fd dups
+    add(x.target);
+  }
   if (!argv.length) return;
   const name = path.posix.basename(argv[0].text);
   const args = argv.slice(1);
   const typed = cmd.words.map((w) => w.text);
+  if (name === "openssl") {
+    for (let i = 0; i < args.length; i++) {
+      const eq = /^-{1,2}(out|o)=(.*)$/.exec(args[i].text);
+      if (eq) add({ ...args[i], text: eq[2] });
+      else if (/^-{1,2}(out|o)$/.test(args[i].text) && args[i + 1]) add(args[++i]);
+    }
+  }
+  const sp = SPLITTERS[name];
+  if (sp) {
+    const pos = [];
+    let prefix = null;
+    for (let i = 0; i < args.length; i++) {
+      const t = args[i].text;
+      if (sp.prefixFlag && t === sp.prefixFlag) prefix = args[++i] ?? lit("");
+      else if (/^--prefix=/.test(t)) prefix = { ...args[i], text: t.slice(9) };
+      else if (sp.values.includes(t)) i++;
+      else if (!t.startsWith("-") || t === "-") pos.push(args[i]);
+    }
+    // split: [input [prefix]]; csplit: input pattern... (prefix only via -f)
+    add(prefix || (name === "split" && pos[1]) || lit(sp.prefix), true);
+  }
   if (INTERPRETERS.has(path.posix.basename(typed[0] ?? "")) && typed.some((t) => /^(-e|-c|-p|-i\S*|--eval|--print|-E)$/.test(t))) ctx.writes.push("*");
   if (name === "dd") for (const a of args) if (a.text.startsWith("of=")) add({ ...a, text: a.text.slice(3) });
   if (COPY_WRITERS.has(name) && name !== "dd") {
@@ -592,7 +624,11 @@ function resolve(cmd, depth = 0, ctx = newContext()) {
       r.indirect = `a script (${w.text}) in a directory that cannot be determined`;
       return;
     }
-    ctx.execs.push(...cands);
+    // Runners and repo bin/ are never content-inspected, so only a write to that exact
+    // path taints them; anything else counts against any write on the line.
+    const isTrusted = (abs) => RUNNER_RE.test(path.basename(abs)) || abs.startsWith(TRUSTED_BIN);
+    ctx.execs.push(...cands.filter((abs) => !isTrusted(abs)));
+    ctx.trustedExecs.push(...cands.filter(isTrusted));
     const label = `a script (${w.text})`;
     const existing = cands.filter((abs) => fs.existsSync(abs));
     if (mustExist && !existing.length) return nestText(null, label);
@@ -779,6 +815,26 @@ function declarations(r) {
 const RUNNER_RE = /^(run-test\.sh|run-distributed\.sh|quick\.sh|run-regression\.sh|find-capacity\.js)$/;
 const GUARDED_TEXT_RE = /K6_ALLOW_PROD_LOAD|--unsafe|(^|[^A-Za-z0-9_.-])x?k6(\s|$)|run-test|run-distributed|find-capacity/;
 
+// Env names that cannot change what runs; allowed before a guarded command. K6_* is
+// allowed except the prod-load switch and the ones the runners use to pick a binary,
+// image, extension, report CLI or secret source, or to skip checks.
+const INERT_ENV_RE = /^(NODE_ENV|CI|DEBUG|TZ|LANG|LC_\w+|FORCE_COLOR|NO_COLOR|TERM|COLUMNS|K6_\w+)$/;
+const K6_EXEC_ENV_RE = /^K6_(ALLOW_PROD_LOAD|BINARY\w*|CMD|EXEC|EXTENSIONS|IMAGE|REGISTRY|REPORT_CLI|SECRET\w*|SKIP_\w+|CACHE_DIR|REPORTS_DIR)$/;
+const isInertEnv = (name) => INERT_ENV_RE.test(name) && !K6_EXEC_ENV_RE.test(name);
+
+// A k6 token, a runner name or a guarded switch inside another program's arguments
+// (docker run, ssh, kubectl run, interpreters' -c/-e code, vim -c, awk system()...).
+const ARG_GUARDED_RE =
+  /(^|[\s;&|(){}'"`=:,!/[])x?k6(?=$|[\s;&|(){}'"`,:@\]])|(run-test|run-distributed|quick|run-regression)\.sh|find-capacity\.js|--unsafe\b|K6_ALLOW_PROD_LOAD/;
+// Commands whose arguments are data (patterns, messages, paths to look at), not code.
+const DATA_TOOLS = new Set([
+  "echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "sed", "git", "gh", "cat", "ls", "head", "tail", "wc",
+  "jq", "yq", "sort", "uniq", "cut", "tr", "diff", "cmp", "test", "[", "[[", "true", "false", "find", "stat", "file",
+  "realpath", "readlink", "dirname", "basename", "which", "type", "whereis", "shellcheck", "shfmt", "cp", "mv", "ln",
+  "rm", "mkdir", "chmod", "touch", "md5sum", "sha256sum", "sha1sum", "cd", "pushd", "popd", "export", "declare",
+  "local", "readonly", "typeset", "alias", "unset", "tee", "column", "fold", "nl", "comm", "join", "paste", "od", "xxd",
+]);
+
 // Variables that make a shell or git run another program.
 const EXEC_ENV_RE = /^(BASH_ENV|ENV|LD_PRELOAD|LD_LIBRARY_PATH|PROMPT_COMMAND|PAGER|EDITOR|VISUAL|GIT_(PAGER|EDITOR|SEQUENCE_EDITOR|SSH|SSH_COMMAND|EXTERNAL_DIFF|ASKPASS|CONFIG_.*))$/;
 const GIT_EXEC_KEY_RE = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass)|alias\.|sequence\.editor|diff\.external|credential\.helper|gpg\.program|pager\.|.*\.(textconv|command|cmd|process|clean|smudge))/i;
@@ -818,7 +874,7 @@ function analyze(command, opts = {}) {
   // Any env assignment (PATH=..., export X=..., env X=...) earlier on the line can change
   // what a guarded command runs, so it is refused before one.
   let assigned = false;
-  const envAssign = (list) => list.some((a) => a.name.text !== "K6_ALLOW_PROD_LOAD");
+  const envAssign = (list) => list.some((a) => a.name.text !== "K6_ALLOW_PROD_LOAD" && !isInertEnv(a.name.text));
 
   for (const r of commands) {
     if (r.indirect) flag(r.indirect);
@@ -845,6 +901,13 @@ function analyze(command, opts = {}) {
     }
     const name = base(head);
     if (head.text !== "[" && head.text !== "[[" && /[[\]?*{}]/.test(head.text)) flag("a command name with glob or brace characters");
+    const launcher = !DATA_TOOLS.has(name) && name !== "helm" && !isK6(head) && !isRunner(head) && !/^x?k6\s/.test(head.text);
+    // kubectl: resource and release names like "k6" are data; the container command
+    // (after --) and --image are not.
+    const scanned = name === "kubectl" ? [...args.slice(args.findIndex((a) => a.text === "--") + 1 || args.length), ...args.filter((a) => a.text.startsWith("--image"))] : args;
+    if (launcher && scanned.some((a) => ARG_GUARDED_RE.test(a.text))) {
+      flag(`k6 or a runner referenced inside the arguments of ${name} (container, remote shell, interpreter code, ...); run tests with ./bin/run-test.sh`);
+    }
     if (name === "helm" && args.some((a) => a.text.startsWith("--post-renderer"))) flag("helm --post-renderer runs another program");
     if (name === "git" && gitRunsCommands(args)) flag("git configured to run another command (pager, editor, alias, ...)");
     if (name === "alias" && args.some((a) => GUARDED_TEXT_RE.test(a.text))) flag("an alias for a guarded command");
@@ -869,7 +932,8 @@ function analyze(command, opts = {}) {
   // Write-then-run: the hook reads files before the line executes, so a file written on
   // the same line may not be what runs.
   const unknownWrite = ctx.writes.includes("*");
-  const hit = ctx.execs.find((e) => unknownWrite || ctx.writes.some((w) => e === w || e.startsWith(w + path.sep)));
+  const written = (e) => ctx.writes.some((w) => e === w || e.startsWith(w + path.sep)) || ctx.prefixWrites.some((p) => e.startsWith(p));
+  const hit = ctx.execs.find((e) => unknownWrite || written(e)) ?? ctx.trustedExecs.find(written);
   if (hit) flag(`a command line that writes files and runs ${path.basename(hit)}; write the file in one command and run it in another`);
   return res;
 }
