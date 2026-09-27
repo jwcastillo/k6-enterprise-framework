@@ -140,8 +140,14 @@ Con capabilities habilitadas, aparecen archivos adicionales:
 | `--with-reports` | `bin/report.sh` |
 | `--with-observability` | `bin/observability.sh`, `infrastructure/` |
 | `--with-binary` | `bin/build-binary.sh` |
-| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.local.json`, `.claude/skills/` |
-| `--with-mcp` | `mcp-server/` |
+| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.json` (hooks de guardrails, declaración del plugin, allow list acotada), `.claude/hooks/guardrails.js`, `.claude/agents/`, `.claude/skills/`, `bin/validate-generated.js` + `bin/_secret-patterns.js` + `bin/_help.js` (gate de generación), `bin/scan-skills.sh`, `bin/agent-bash-guard.js`, `security/baselines/*.yaml`, `security/skillspector-triage.md` |
+
+`--with-claude` ya no escribe `.claude/settings.local.json` (un archivo por usuario). El
+`.claude/settings.json` exportado solo preaprueba los scripts wrapper (`./bin/run-test.sh`,
+`./bin/report.sh`, `./bin/observability.sh`, `./bin/build-binary.sh`), `npm run` y el gate de
+generación; un `k6 run` directo sigue bloqueado por el hook y `node` no queda preaprobado.
+Con `--with-mcp` el MCP server se registra en `.mcp.json`.
+| `--with-mcp` | `mcp-server/`, `.mcp.json` |
 
 ---
 
@@ -223,6 +229,9 @@ Los repositorios exportados incluyen `bin/update-framework.sh` para traer versio
 ```
 
 El script de actualizacion reemplaza solo el directorio `framework/`, preservando todos los archivos del cliente.
+Igual que el export, quita el modulo de IA (solo Node) y su re-export de
+`framework/src/index.ts`; si el repo vendorizo su propio `framework/src/ai`, ese directorio se
+conserva tal cual.
 
 ---
 

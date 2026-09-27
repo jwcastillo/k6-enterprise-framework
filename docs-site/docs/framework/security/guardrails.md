@@ -20,7 +20,8 @@ None of them is a sandbox: they catch the common, costly mistakes. A human still
 
 ```bash
 node bin/validate-generated.js --kind=scenario|testplan|flow|patch|report <path...> \
-  [--client=<name>|--config=<client config json>] [--format=text|json] [--strict]
+  [--client=<name>|--config=<client config json>] [--env=<env>] [--k6-env=KEY=VAL ...] \
+  [--format=text|json] [--strict] [--no-build]
 ```
 
 Exit codes: `0` pass, `1` fail, `2` usage error. `--format=json` prints
@@ -51,6 +52,36 @@ Defaults without a config: no host allowlist (hard-coded URLs warn), `maxVUs` 50
 
 `--no-build` replaces webpack + `k6 inspect` with a syntax-only transpile (about half a
 second instead of several). The PostToolUse hook uses it; run the full gate before accepting.
+In `--no-build`, a scenario whose options come from another module
+(`export { options } from "..."` or `export const options = sharedOptions;`) gets a `warn`
+on `thresholds` instead of a `fail`: the text alone cannot see them.
+
+### Resolved options
+
+When `k6 inspect` succeeds, the gate reads the options object k6 resolved (imports,
+re-exports and helper functions included) and checks it instead of the source text:
+
+- `thresholds`: at least one threshold metric;
+- `system-tags`: `url` is not in `systemTags` (warn when unset);
+- `load-ceiling`: per scenario, the peak VUs (`vus`, `startVUs`, `maxVUs`,
+  `preAllocatedVUs`, VU stage targets) against `maxVUs` and the peak rate (`rate`,
+  `startRate`, arrival-rate stage targets) against `maxRate`; warn, or fail with `--strict`.
+
+`k6 inspect` cannot read your shell environment. When init code opens a path from `__ENV`
+(a data file, a CSV directory), pass it with the repeatable `--k6-env=KEY=VAL`; each one
+reaches `k6 inspect` as `-e KEY=VAL`:
+
+```bash
+node bin/validate-generated.js --kind=scenario scenarios/api/orders.ts --strict \
+  --k6-env=DATA_DIR=data --k6-env=BASE_URL=https://api.staging.example.com
+```
+
+### Standalone repos
+
+In a repo exported with `bin/export-client.sh --with-claude` the gate lives in `bin/` and
+detects the layout on its own (a `framework/src` directory): profiles and schemas come from
+`framework/shared`, and `--env=<env>` reads `config/<env>.json` (then `config/default.json`)
+without `--client`.
 
 ## SkillSpector
 

@@ -20,7 +20,8 @@ Ninguna es un sandbox: atrapan los errores comunes y caros. Un humano sigue revi
 
 ```bash
 node bin/validate-generated.js --kind=scenario|testplan|flow|patch|report <path...> \
-  [--client=<name>|--config=<client config json>] [--format=text|json] [--strict]
+  [--client=<name>|--config=<client config json>] [--env=<env>] [--k6-env=KEY=VAL ...] \
+  [--format=text|json] [--strict] [--no-build]
 ```
 
 Códigos de salida: `0` pasa, `1` falla, `2` error de uso. `--format=json` imprime
@@ -50,6 +51,36 @@ Sin config: sin allowlist (las URLs hardcodeadas avisan), `maxVUs` 500, `maxRate
 
 `--no-build` reemplaza webpack + `k6 inspect` por un transpile solo de sintaxis (medio
 segundo en vez de varios). Lo usa el hook PostToolUse; corré el gate completo antes de aceptar.
+En `--no-build`, un escenario cuyas options vienen de otro módulo
+(`export { options } from "..."` o `export const options = sharedOptions;`) recibe `warn`
+en `thresholds` en vez de `fail`: el texto solo no las ve.
+
+### Options resueltas
+
+Cuando `k6 inspect` pasa, el gate lee el objeto de options que resolvió k6 (con imports,
+re-exports y funciones helper incluidos) y lo chequea en lugar del texto fuente:
+
+- `thresholds`: al menos una métrica con threshold;
+- `system-tags`: `url` no está en `systemTags` (warn si no se define);
+- `load-ceiling`: por escenario, el pico de VUs (`vus`, `startVUs`, `maxVUs`,
+  `preAllocatedVUs`, targets de stages de VUs) contra `maxVUs` y el pico de tasa (`rate`,
+  `startRate`, targets de stages de arrival-rate) contra `maxRate`; warn, o fail con `--strict`.
+
+`k6 inspect` no lee tu entorno de shell. Si el init abre un path desde `__ENV` (un archivo
+de datos, un directorio de CSV), pasalo con `--k6-env=KEY=VAL` (repetible); cada uno llega a
+`k6 inspect` como `-e KEY=VAL`:
+
+```bash
+node bin/validate-generated.js --kind=scenario scenarios/api/orders.ts --strict \
+  --k6-env=DATA_DIR=data --k6-env=BASE_URL=https://api.staging.example.com
+```
+
+### Repos standalone
+
+En un repo exportado con `bin/export-client.sh --with-claude` el gate vive en `bin/` y
+detecta el layout solo (existe `framework/src`): perfiles y schemas salen de
+`framework/shared`, y `--env=<env>` lee `config/<env>.json` (y luego `config/default.json`)
+sin `--client`.
 
 ## SkillSpector
 

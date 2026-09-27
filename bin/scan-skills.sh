@@ -35,7 +35,11 @@ for arg in "$@"; do
     *) PATHS+=("$arg") ;;
   esac
 done
-[[ ${#PATHS[@]} -eq 0 ]] && PATHS=("${ROOT_DIR}/.claude/skills" "${ROOT_DIR}/mcp-server/src")
+if [[ ${#PATHS[@]} -eq 0 ]]; then
+  PATHS=("${ROOT_DIR}/.claude/skills")
+  # Standalone exports ship mcp-server/ only with --with-mcp.
+  [[ -d "${ROOT_DIR}/mcp-server/src" ]] && PATHS+=("${ROOT_DIR}/mcp-server/src")
+fi
 
 if ! command -v skillspector >/dev/null 2>&1; then
   echo "scan-skills: skillspector not found. Install: uv tool install git+https://github.com/NVIDIA/skillspector.git" >&2

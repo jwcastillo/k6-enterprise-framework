@@ -8,7 +8,11 @@
  *
  * Usage:
  *   node bin/validate-generated.js --kind=scenario|testplan|flow|patch|report <path...>
- *        [--client=<name>|--config=<client config json>] [--format=text|json] [--strict]
+ *        [--client=<name>|--config=<client config json>] [--env=<env>] [--k6-env=KEY=VAL ...]
+ *        [--format=text|json] [--strict] [--no-build]
+ *
+ * Works in the monorepo and in standalone exports (framework/ vendored next to
+ * config/, scenarios/): see STANDALONE below.
  *
  * Exit codes: 0 pass, 1 fail, 2 usage error.
  *
@@ -22,9 +26,12 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { findSecrets, findPII } = require("./_secret-patterns");
-const { resolveConfigPath } = require("./target-guard");
 
 const ROOT = path.resolve(__dirname, "..");
+// Standalone export (bin/export-client.sh): framework vendored under framework/, client
+// config in config/<env>.json, profiles and schemas in framework/shared.
+const STANDALONE = fs.existsSync(path.join(ROOT, "framework", "src"));
+const SHARED = path.join(ROOT, STANDALONE ? "framework/shared" : "shared");
 const KINDS = ["scenario", "testplan", "flow", "patch", "report"];
 const BUCKETS = ["api", "flow", "domain", "chaos", "perf"];
 const GATE_RE = /export const gate = "(quarantined|experimental|unsafe)"/;
@@ -56,7 +63,13 @@ function hostOf(url) {
 
 function loadConfig(opts) {
   let configPath = opts.config;
-  if (!configPath && opts.client) configPath = resolveConfigPath(ROOT, opts.client, opts.env || "default");
+  const env = opts.env || "default";
+  if (!configPath && STANDALONE) {
+    configPath = [`${env}.json`, "default.json"].map((f) => path.join(ROOT, "config", f)).find((f) => fs.existsSync(f)) || null;
+  } else if (!configPath && opts.client) {
+    // Lazy: the monorepo target-guard is not shipped to standalone repos.
+    configPath = require("./target-guard").resolveConfigPath(ROOT, opts.client, env);
+  }
   if (!configPath) return { config: null };
   if (!fs.existsSync(configPath)) throw new UsageError(`config not found: ${configPath}`);
   try {
@@ -197,13 +210,75 @@ function transpileScenario(text, file) {
   return check("compile", "fail", ts.flattenDiagnosticMessageText(diag.messageText, " "), { file, line });
 }
 
-function k6Inspect(bundle, file) {
+/**
+ * @param {string[]} k6Env KEY=VAL pairs passed as `-e` (init code may open data paths from __ENV)
+ * @returns {{ check: object, options: object|null }} options = what k6 resolved (top-level JSON)
+ */
+function k6Inspect(bundle, file, k6Env = []) {
   const probe = spawnSync("k6", ["version"], { encoding: "utf8" });
-  if (probe.error) return check("k6-inspect", "warn", "k6 not installed — inspect skipped", { file });
-  const res = spawnSync("k6", ["inspect", bundle], { encoding: "utf8", cwd: path.dirname(bundle), timeout: 30000 });
-  if (res.status === 0) return check("k6-inspect", "pass", "k6 inspect ok", { file });
+  if (probe.error) return { check: check("k6-inspect", "warn", "k6 not installed — inspect skipped", { file }), options: null };
+  const envArgs = k6Env.flatMap((kv) => ["-e", kv]);
+  const res = spawnSync("k6", ["inspect", ...envArgs, bundle], { encoding: "utf8", cwd: path.dirname(bundle), timeout: 30000 });
+  if (res.status === 0) {
+    let options = null;
+    try {
+      options = JSON.parse(res.stdout);
+    } catch {
+      // unparseable output: keep the static checks
+    }
+    return { check: check("k6-inspect", "pass", "k6 inspect ok", { file }), options };
+  }
   const msg = (res.stderr || res.stdout || "").split("\n").filter(Boolean).slice(-2).join(" ").slice(0, 300);
-  return check("k6-inspect", "fail", `k6 inspect failed: ${msg}`, { file });
+  const hint = /__ENV|empty filename|no such file/i.test(msg) ? " (init needs env vars? pass --k6-env=KEY=VAL)" : "";
+  return { check: check("k6-inspect", "fail", `k6 inspect failed: ${msg}${hint}`, { file }), options: null };
+}
+
+const maxOf = (...xs) => Math.max(0, ...xs.map(Number).filter(Number.isFinite));
+const stageTargets = (stages) => (Array.isArray(stages) ? stages.map((s) => s && s.target) : []);
+
+/** Peak VUs and peak iteration rate per scenario of k6-resolved options. */
+function peakLoad(options) {
+  const scenarios = { ...(options.scenarios || {}) };
+  if (!Object.keys(scenarios).length && (options.vus || options.stages)) {
+    scenarios.default = { vus: options.vus, stages: options.stages };
+  }
+  return Object.entries(scenarios).map(([name, sc]) => {
+    const arrival = /arrival-rate/.test(String(sc.executor || ""));
+    return {
+      name,
+      vus: maxOf(sc.vus, sc.startVUs, sc.maxVUs, sc.preAllocatedVUs, ...(arrival ? [] : stageTargets(sc.stages))),
+      rate: maxOf(sc.rate, sc.startRate, ...(arrival ? stageTargets(sc.stages) : [])),
+    };
+  });
+}
+
+/**
+ * Thresholds, systemTags and load ceiling on the options k6 resolved. Replaces the
+ * static text checks, which cannot see options built or re-exported from another module.
+ */
+function resolvedOptionChecks(options, ctx, file) {
+  const checks = [];
+  const nThr = Object.keys(options.thresholds || {}).length;
+  checks.push(
+    nThr
+      ? check("thresholds", "pass", `${nThr} threshold metric(s) in the resolved options`, { file })
+      : check("thresholds", "fail", "resolved options declare no thresholds", { file })
+  );
+  const sys = options.systemTags;
+  if (!Array.isArray(sys)) checks.push(check("system-tags", "warn", "systemTags not set — k6 default includes 'url' (high cardinality)", { file }));
+  else if (sys.includes("url")) checks.push(check("system-tags", "fail", "resolved systemTags include 'url' (metric cardinality)", { file }));
+  else checks.push(check("system-tags", "pass", "resolved systemTags exclude 'url'", { file }));
+
+  const maxVUs = (ctx.config && ctx.config.maxVUs) || DEFAULT_MAX_VUS;
+  const maxRate = (ctx.config && ctx.config.maxRate) || DEFAULT_MAX_RATE;
+  const over = [];
+  for (const p of peakLoad(options)) {
+    if (p.vus > maxVUs) over.push(`${p.name}: ${p.vus} VUs exceeds ceiling ${maxVUs}`);
+    if (p.rate > maxRate) over.push(`${p.name}: rate ${p.rate} exceeds ceiling ${maxRate}`);
+  }
+  if (!over.length) checks.push(check("load-ceiling", "pass", `resolved load within ceiling (maxVUs=${maxVUs}, maxRate=${maxRate})`, { file }));
+  else for (const o of over) checks.push(check("load-ceiling", ctx.strict ? "fail" : "warn", o, { file }));
+  return checks;
 }
 
 function loadCeilingChecks(text, config, strict, file) {
@@ -272,10 +347,17 @@ async function validateScenario(file, ctx) {
   checks.push(...hostChecks(urls, allowedHostsOf(ctx.config), file));
   checks.push(...secretChecks(text, file));
 
+  // Options defined in another module (`export { options } from`, `export const options = shared;`)
+  // are invisible to this text check; k6 inspect sees them resolved (full gate only).
+  const importedOptions =
+    /export\s*\{[^}]*\boptions\b[^}]*\}\s*from/.test(text) ||
+    /export\s+const\s+options\s*(?::[^=]+)?=\s*[A-Za-z_$][\w$.]*\s*;/.test(text);
   checks.push(
     /\bthresholds\s*:/.test(text)
       ? check("thresholds", "pass", "thresholds declared", { file })
-      : check("thresholds", "fail", "options must declare thresholds", { file })
+      : importedOptions
+        ? check("thresholds", "warn", "options come from another module; the full gate (without --no-build) checks them resolved", { file })
+        : check("thresholds", "fail", "options must declare thresholds", { file })
   );
 
   const sys = /\bsystemTags\s*:\s*\[([^\]]*)\]/.exec(text);
@@ -294,7 +376,14 @@ async function validateScenario(file, ctx) {
   } else {
     const built = await buildScenario(abs);
     checks.push(check("compile", built.status, built.message, { file }));
-    if (built.status === "pass") checks.push(k6Inspect(built.bundle, file));
+    if (built.status === "pass") {
+      const inspected = k6Inspect(built.bundle, file, ctx.k6Env);
+      checks.push(inspected.check);
+      if (inspected.options) {
+        const RESOLVED = ["thresholds", "system-tags", "load-ceiling"];
+        return [...checks.filter((c) => !RESOLVED.includes(c.id)), ...resolvedOptionChecks(inspected.options, ctx, file)];
+      }
+    }
   }
   return checks;
 }
@@ -308,7 +397,7 @@ function validateTestPlan(file, ctx) {
   } catch (err) {
     return [check("json", "fail", `not valid JSON: ${err.message}`, { file })];
   }
-  const checks = schemaChecks(plan, path.join(ROOT, "shared/schemas/test-plan.schema.json"), file);
+  const checks = schemaChecks(plan, path.join(SHARED, "schemas/test-plan.schema.json"), file);
 
   const urls = [];
   if (typeof plan.baseUrl === "string") urls.push({ url: plan.baseUrl });
@@ -319,7 +408,7 @@ function validateTestPlan(file, ctx) {
   checks.push(...secretChecks(JSON.stringify(plan, null, 1), file));
 
   const profiles = [...(Array.isArray(plan.testTypes) ? plan.testTypes : []), ...(plan.profile ? [plan.profile] : [])];
-  const missing = profiles.filter((p) => !fs.existsSync(path.join(ROOT, "shared/profiles", `${p}.json`)));
+  const missing = profiles.filter((p) => !fs.existsSync(path.join(SHARED, "profiles", `${p}.json`)));
   checks.push(
     missing.length
       ? check("profiles", "fail", `unknown profile(s): ${missing.join(", ")} (see shared/profiles/)`, { file })
@@ -344,7 +433,7 @@ function validateFlow(target, ctx) {
   }
 
   // The schema ships with bin/discover-flow.js; load it lazily so the gate works before that lands.
-  const schemaPath = ctx.schema || path.join(ROOT, "shared/schemas/discovery-flow.schema.json");
+  const schemaPath = ctx.schema || path.join(SHARED, "schemas/discovery-flow.schema.json");
   if (fs.existsSync(schemaPath)) checks.push(...schemaChecks(flow, schemaPath, flowJson));
   else checks.push(check("schema", "skip", `schema not found (${path.relative(ROOT, schemaPath)}) — schema validation skipped`, { file: flowJson }));
 
@@ -530,7 +619,7 @@ async function validate(kind, target, ctx) {
 }
 
 function parseArgs(argv) {
-  const opts = { paths: [], format: "text", strict: false, noBuild: false, denyTerms: [] };
+  const opts = { paths: [], format: "text", strict: false, noBuild: false, denyTerms: [], k6Env: [] };
   for (const a of argv) {
     const [k, v] = a.includes("=") ? [a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)] : [a, undefined];
     switch (k) {
@@ -541,6 +630,10 @@ function parseArgs(argv) {
       case "--format": opts.format = v; break;
       case "--strict": opts.strict = true; break;
       case "--no-build": opts.noBuild = true; break;
+      case "--k6-env":
+        if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(String(v || ""))) throw new UsageError("--k6-env needs KEY=VAL");
+        opts.k6Env.push(v);
+        break;
       case "--schema": opts.schema = v; break;
       case "--data": opts.data = v; break;
       case "--deny-terms": opts.denyTerms = String(v || "").split(",").map((s) => s.trim()); break;
@@ -574,21 +667,23 @@ async function main(argv) {
       name: "validate-generated",
       description: "Deterministic gate for AI-produced artifacts (no LLM). Exit 0 pass, 1 fail, 2 usage.",
       usage:
-        "node bin/validate-generated.js --kind=scenario|testplan|flow|patch|report <path...> [--client=<name>|--config=<json>] [--format=text|json] [--strict]",
+        "node bin/validate-generated.js --kind=scenario|testplan|flow|patch|report <path...> [--client=<name>|--config=<json>] [--env=<env>] [--k6-env=KEY=VAL ...] [--format=text|json] [--strict]",
       flags: [
         { flag: "--kind=<kind>", description: "scenario | testplan | flow | patch | report (required)" },
-        { flag: "--client=<name>", description: "Read allowedHosts / maxVUs / maxRate from clients/<name>/config/<env>.json" },
+        { flag: "--client=<name>", description: "Read allowedHosts / maxVUs / maxRate from clients/<name>/config/<env>.json (standalone repos: config/<env>.json, no --client needed)" },
         { flag: "--config=<file>", description: "Client config JSON to read allowedHosts / maxVUs / maxRate from" },
-        { flag: "--env=<env>", description: "Config environment used with --client (default: default)" },
+        { flag: "--env=<env>", description: "Config environment (default: default); falls back to default.json" },
         { flag: "--format=text|json", description: "Output format (default: text)" },
         { flag: "--strict", description: "Fail (instead of warn) when load exceeds maxVUs / maxRate" },
         { flag: "--no-build", description: "scenario: syntax-only transpile, skip webpack + k6 inspect (used by hooks)" },
+        { flag: "--k6-env=KEY=VAL", description: "scenario: repeatable; passed as -e KEY=VAL to k6 inspect (init code that opens data paths from __ENV)" },
         { flag: "--schema=<file>", description: "flow: override shared/schemas/discovery-flow.schema.json" },
         { flag: "--data=<file>", description: "report: deterministic JSON the numbers must come from (default: <report>.json)" },
         { flag: "--deny-terms=a,b", description: "report: terms that must not appear (brand/client names)" },
       ],
       examples: [
         "node bin/validate-generated.js --kind=scenario clients/acme/scenarios/api/login.ts --client=acme",
+        "node bin/validate-generated.js --kind=scenario scenarios/api/login.ts --env=staging --k6-env=DATA_DIR=data   # standalone repo",
         "node bin/validate-generated.js --kind=testplan plan.json --config=clients/acme/config/staging.json --format=json",
         "node bin/validate-generated.js --kind=flow reports/discovery/checkout/",
         "node bin/validate-generated.js --kind=report analysis.md --data=summary.json --deny-terms=acme",

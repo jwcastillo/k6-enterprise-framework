@@ -657,6 +657,17 @@ if [[ "${WITH_MCP}" == "true" ]]; then
     MCP_FILES=$(find "${OUTPUT_DIR}/mcp-server" -type f | wc -l | tr -d ' ')
     log_success "MCP server copied (${MCP_FILES} files)"
     CAPABILITY_FILES=$((CAPABILITY_FILES + MCP_FILES))
+    # Project-scope MCP registration (Claude Code reads .mcp.json, not settings files).
+    cat > "${OUTPUT_DIR}/.mcp.json" <<'MCP_JSON'
+{
+  "mcpServers": {
+    "k6-framework": {
+      "command": "node",
+      "args": ["mcp-server/dist/index.js"]
+    }
+  }
+}
+MCP_JSON
   else
     log_warn "mcp-server/ not found — skipping MCP"
     WITH_MCP="false"
@@ -760,7 +771,7 @@ cat > "${OUTPUT_DIR}/package.json" << PKGJSON
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/k6": "^1.6.0",
+    "@types/k6": "^2.2.1",
     "@types/node": "^22.19.19",
     "@typescript-eslint/eslint-plugin": "^8.56.0",
     "@typescript-eslint/parser": "^8.56.0",
@@ -1431,35 +1442,45 @@ fi
 
 # ── Capability: .claude/ ─────────────────────────────────────────────────────
 if [[ "${WITH_CLAUDE}" == "true" ]]; then
-  # Generate settings.local.json
-  local_MCP_SECTION=""
-  if [[ "${WITH_MCP}" == "true" ]]; then
-    local_MCP_SECTION=',
-    "mcpServers": {
-      "k6-framework": {
-        "command": "node",
-        "args": ["mcp-server/dist/index.js"]
-      }
-    }'
-  fi
+  # Project settings = the monorepo's .claude/settings.json (guardrail hooks + plugin
+  # declaration) plus a narrow allow list. No settings.local.json: that file is each
+  # user's own (gitignored) and a generated one either never reaches the team or
+  # overrides personal choices. The allow list covers the wrappers only: no bare
+  # `k6 run` (skips the runner's checks and report pipeline; the hook blocks it anyway)
+  # and no blanket `node:*` (would pre-approve any script).
+  mkdir -p "${OUTPUT_DIR}/.claude/hooks"
+  cp "${ROOT_DIR}/.claude/hooks/"*.js "${OUTPUT_DIR}/.claude/hooks/"
+  # The standalone runner has no --client flag: drop it from the hook's hint.
+  sed -i.bak 's/--client=<c> //' "${OUTPUT_DIR}/.claude/hooks/guardrails.js" && rm -f "${OUTPUT_DIR}/.claude/hooks/guardrails.js.bak"
+  node -e '
+    const fs = require("fs");
+    const [src, dest] = process.argv.slice(1);
+    const settings = JSON.parse(fs.readFileSync(src, "utf8"));
+    settings.permissions = {
+      allow: [
+        "Bash(./bin/run-test.sh:*)",
+        "Bash(./bin/report.sh:*)",
+        "Bash(./bin/observability.sh:*)",
+        "Bash(./bin/build-binary.sh:*)",
+        "Bash(npm run:*)",
+        "Bash(node bin/validate-generated.js:*)",
+      ],
+    };
+    fs.writeFileSync(dest, JSON.stringify(settings, null, 2) + "\n");
+  ' "${ROOT_DIR}/.claude/settings.json" "${OUTPUT_DIR}/.claude/settings.json"
+  log_success "Generated .claude/settings.json + .claude/hooks/ (guardrail hooks)"
 
-  cat > "${OUTPUT_DIR}/.claude/settings.local.json" <<CLAUDE_SETTINGS
-{
-  "permissions": {
-    "allow": [
-      "Bash(./bin/run-test.sh:*)",
-      "Bash(./bin/report.sh:*)",
-      "Bash(./bin/observability.sh:*)",
-      "Bash(./bin/build-binary.sh:*)",
-      "Bash(npm run:*)",
-      "Bash(node:*)",
-      "Bash(k6 run:*)",
-      "Bash(docker compose:*)"
-    ]
-  }${local_MCP_SECTION}
-}
-CLAUDE_SETTINGS
-  log_success "Generated .claude/settings.local.json"
+  # Generation gate and skill scan the hooks and the exported agents call. They sit in
+  # bin/ (the hooks call $CLAUDE_PROJECT_DIR/bin/validate-generated.js); the validator
+  # detects the standalone layout (framework/shared, config/<env>.json) on its own.
+  for f in validate-generated.js _secret-patterns.js _help.js scan-skills.sh; do
+    cp "${ROOT_DIR}/bin/${f}" "${OUTPUT_DIR}/bin/${f}"
+  done
+  chmod +x "${OUTPUT_DIR}/bin/scan-skills.sh"
+  mkdir -p "${OUTPUT_DIR}/security/baselines"
+  cp "${ROOT_DIR}/security/baselines/"*.yaml "${OUTPUT_DIR}/security/baselines/"
+  cp "${ROOT_DIR}/security/skillspector-triage.md" "${OUTPUT_DIR}/security/"
+  log_success "Exported generation gate (bin/validate-generated.js) + bin/scan-skills.sh + security/baselines/"
 
   # Generate CLAUDE.md
   _SCENARIO_LIST=$(find "${OUTPUT_DIR}/scenarios" -name "*.ts" -type f 2>/dev/null | sed "s|${OUTPUT_DIR}/scenarios/||; s|\.ts$||" | sort | sed 's/^/- /' || echo "- (none)")
@@ -1514,6 +1535,15 @@ breakpoint (1000 VUs, 1h), soak (20 VUs, 4h+)
 
 ## Available Scenarios
 ${_SCENARIO_LIST}
+
+## Guardrails
+- Generation gate: \`node bin/validate-generated.js --kind=scenario <file> --strict\`
+  (add \`--env=<env>\` for config/<env>.json and \`--k6-env=KEY=VAL\` when init code reads
+  paths from \`__ENV\`). Exit 0 pass, 1 fail. Run it before committing any scenario.
+- Hooks in \`.claude/settings.json\` (\`.claude/hooks/guardrails.js\`): block a bare
+  \`k6 run\` and \`--unsafe\`, block HAR/replay files on tracked paths, and run the gate
+  (\`--no-build\`) after every edit of a scenario.
+- Skill scan: \`./bin/scan-skills.sh\` (SkillSpector, baselines in \`security/baselines/\`).
 
 ## Agent team
 Subagents in \`.claude/agents/\` (perf-test-architect, perf-scenario-author,
@@ -2149,7 +2179,7 @@ cd mcp-server && npm install && npm run build
 
 ### Configure in Claude Code
 
-The MCP server is pre-configured in `.claude/settings.local.json`. When you open this project with Claude Code, the MCP tools will be available automatically.
+The MCP server is pre-configured in `.mcp.json` (project scope). Claude Code asks you to approve it the first time you open the project.
 
 MCPEOF
 fi
@@ -2168,6 +2198,16 @@ This project includes Claude Code configuration for AI-assisted performance test
 - **k6 Analysis** — Analyze test results and provide optimization recommendations
 - **perf-team** — Orchestrates the performance agent team in `.claude/agents/`
   (plan → author → validate → smoke → load (human-gated) → analyze → report)
+
+### Guardrails
+
+- `.claude/settings.json` registers the hooks in `.claude/hooks/guardrails.js`: a bare
+  `k6 run` and `--unsafe` are blocked (use `./bin/run-test.sh`), recorded traffic
+  (HAR/replay) cannot be written to tracked paths, and every edited scenario goes through
+  the generation gate.
+- Generation gate: `node bin/validate-generated.js --kind=scenario scenarios/api/<name>.ts --strict`
+  (`--env=<env>` reads `config/<env>.json`; `--k6-env=KEY=VAL` passes env vars to `k6 inspect`).
+- Skill scan: `./bin/scan-skills.sh` (needs SkillSpector; baselines in `security/baselines/`).
 
 ### Usage
 
