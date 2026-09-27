@@ -28,16 +28,14 @@ try {
 const MENTIONS_GUARDED = /k6|run-test|run-distributed|run-regression|quick\.sh|find-capacity|--unsafe|K6_ALLOW_PROD_LOAD/i;
 
 /** @returns {string|null} reason to deny, or null */
-function checkBash(command, env = process.env, guard = shellGuard) {
+function checkBash(command, env = process.env, guard = shellGuard, cwd = undefined) {
   const cmd = String(command || "");
   if (!guard) {
     return MENTIONS_GUARDED.test(cmd) ? "bin/_shell-guard.js is missing, so this command cannot be checked. Restore it before running tests." : null;
   }
-  const a = guard.analyze(cmd);
-  if (a.error) {
-    // Fail closed only where it matters: unparseable lines that touch k6 or the runners.
-    return MENTIONS_GUARDED.test(cmd) ? `Cannot parse this command (${a.error}); ${guard.INDIRECTION_HINT}.` : null;
-  }
+  const a = guard.analyze(cmd, { cwd });
+  // Fail closed on anything unparseable: escapes such as $'\x..' hide guarded words from a text match.
+  if (a.error) return `Blocked: could not parse command (${a.error}); write it in a simpler form.`;
   if (a.indirect) return `Blocked: ${a.indirect} — ${guard.INDIRECTION_HINT}.`;
   // `k6 run` / `k6 cloud` straight from the shell skips target-guard, gating and reports.
   if (a.k6Load) {
@@ -108,7 +106,7 @@ function main(mode) {
   const input = readStdin();
   const tool = input.tool_input || {};
   let reason = null;
-  if (mode === "bash") reason = checkBash(tool.command);
+  if (mode === "bash") reason = checkBash(tool.command, process.env, shellGuard, input.cwd);
   else if (mode === "write") reason = checkWrite(tool.file_path);
   else if (mode === "post-scenario") reason = checkScenario(tool.file_path);
   if (reason) {

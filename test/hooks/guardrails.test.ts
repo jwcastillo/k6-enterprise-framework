@@ -56,9 +56,28 @@ describe("checkBash", () => {
     }
   });
 
-  it("fails closed on unparseable lines that mention k6 or the runner, open otherwise", () => {
-    expect(checkBash(`./bin/run-test.sh --scenario="x`, {})).toMatch(/Cannot parse/);
-    expect(checkBash(`echo "unterminated`, {})).toBeNull();
+  // Adversarial review: a parse error used to fail open unless the raw text named k6,
+  // and ANSI-C hex escapes hide the name. Any parse error now fails closed.
+  it("fails closed on every parse error", () => {
+    expect(checkBash(`./bin/run-test.sh --scenario="x`, {})).toMatch(/could not parse command/);
+    expect(checkBash(`echo "unterminated`, {})).toMatch(/write it in a simpler form/);
+    expect(checkBash("echo x | (", {})).toMatch(/could not parse command/);
+  });
+
+  it("blocks the array-assignment + hex-escape bypass", () => {
+    const hidden = "$'" + "\\x6b" + "\\x36" + " run x.js'";
+    expect(checkBash(`arr=(x); bash -c ${hidden}`, {})).toMatch(/run-test\.sh/);
+    expect(checkBash(`arr=(x); ${hidden}`, {})).toMatch(/run-test\.sh/);
+  });
+
+  it("parses array assignments and function definitions instead of failing", () => {
+    expect(checkBash("arr=(a b c); echo ok", {})).toBeNull();
+    expect(checkBash("f() { echo ok; }; f", {})).toBeNull();
+    expect(checkBash("f(){ k6 run x.js; }; f", {})).toMatch(/run-test\.sh/);
+  });
+
+  it("uses the payload cwd to resolve scripts", () => {
+    expect(checkBash("pnpm test:reference", {}, undefined, ROOT)).toMatch(/run-test\.sh/);
   });
 
   it("fails closed when the shell parser module is missing", () => {

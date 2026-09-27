@@ -1,9 +1,12 @@
 /**
  * bin/_shell-guard.js — the shell parser behind the Claude hook and the agent Bash guard.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
+const ROOT = path.resolve(__dirname, "../..");
 const { parseShell, analyze, ShellParseError } = require(path.resolve(__dirname, "../../bin/_shell-guard.js"));
 
 type Cmd = { words: { text: string }[]; heredocs: string[] };
@@ -100,6 +103,77 @@ describe("analyze", () => {
     expect(analyze("bash bin/run-test.sh --scenario=x --unsafe").unsafeFlag).toBe(true);
     expect(analyze(`env "K6_ALLOW_PROD_LOAD=true" ./bin/run-test.sh`).prodLoad.literalTrue).toBe(true);
     expect(analyze("export K6_ALLOW_PROD_LOAD=true; ./bin/run-test.sh").prodLoad.literalTrue).toBe(true);
+  });
+
+  // Adversarial review: package scripts, script files and a few wrappers were invisible.
+  describe("resolves package scripts", () => {
+    const at = { cwd: ROOT };
+    it.each(["pnpm test:reference", "pnpm run test:reference", "npm run test:reference", "yarn test:reference", "pnpm --dir . run test:reference"])(
+      "%s runs k6",
+      (cmd) => {
+        expect(analyze(cmd, at).k6Load).toBe(true);
+      }
+    );
+
+    it("refuses scripts it cannot resolve or that fan out over workspaces", () => {
+      expect(analyze("pnpm run no-such-script", at).indirect).toMatch(/cannot be resolved/);
+      expect(analyze("pnpm -r test", at).indirect).toMatch(/workspace/);
+      expect(analyze("pnpm run $S", at).indirect).toBeTruthy();
+    });
+
+    it("keeps ordinary scripts usable", () => {
+      for (const cmd of ["pnpm lint", "pnpm test", "pnpm validate", "npm test", "pnpm install"]) {
+        const a = analyze(cmd, at);
+        expect(a.indirect, cmd).toBeNull();
+        expect(a.k6Load, cmd).toBe(false);
+      }
+    });
+  });
+
+  describe("reads script files", () => {
+    let dir: string;
+    beforeAll(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), "shell-guard-"));
+      fs.writeFileSync(path.join(dir, "evil.sh"), "#!/bin/bash\necho start\n" + ["k6", "run", "x.js"].join(" ") + "\n");
+      fs.writeFileSync(path.join(dir, "ok.sh"), "#!/bin/sh\necho fine\n");
+      fs.writeFileSync(path.join(dir, "weird.sh"), "echo 'unterminated\n");
+    });
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it.each(["bash evil.sh", "sh ./evil.sh", "./evil.sh", "source evil.sh", ". evil.sh", "zsh -e evil.sh"])("%s is inspected", (cmd) => {
+      expect(analyze(cmd, { cwd: dir }).k6Load).toBe(true);
+    });
+
+    it("refuses scripts that are missing or unparseable, allows clean ones", () => {
+      expect(analyze("bash missing.sh", { cwd: dir }).indirect).toMatch(/cannot be inspected/);
+      expect(analyze("source missing.sh", { cwd: dir }).indirect).toMatch(/cannot be inspected/);
+      expect(analyze("bash weird.sh", { cwd: dir }).indirect).toMatch(/cannot be parsed/);
+      const ok = analyze("bash ok.sh && ./ok.sh", { cwd: dir });
+      expect(ok.indirect).toBeNull();
+      expect(ok.k6Load).toBe(false);
+    });
+
+    it("does not re-parse the runners or the repo's own bin/ tooling", () => {
+      expect(analyze("./bin/run-test.sh --scenario=api/x", { cwd: ROOT }).k6Load).toBe(false);
+      expect(analyze("bash bin/detect-secrets.sh src", { cwd: ROOT }).indirect).toBeNull();
+    });
+  });
+
+  it("sees through watch, find -exec, glob names, git exec config and exec env vars", () => {
+    expect(analyze("watch -n 5 k6 run x.js").k6Load).toBe(true);
+    expect(analyze("find . -name x.js -exec k6 run {} ;").k6Load).toBe(true);
+    for (const cmd of [
+      "k[6] run x.js",
+      "k? run x.js",
+      "{k6,x} run x.js",
+      "git -c core.pager=less log",
+      "git config alias.x '!true'",
+      "BASH_ENV=x.sh bash -c true",
+      "helm template x . --post-renderer=./r.sh",
+    ]) {
+      expect(analyze(cmd).indirect, cmd).toBeTruthy();
+    }
+    expect(analyze("[ -f x ] && git log -1").indirect).toBeNull();
   });
 
   it("stays fast on large input", () => {

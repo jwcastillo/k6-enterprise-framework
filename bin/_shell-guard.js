@@ -16,6 +16,7 @@
 
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 
 class ShellParseError extends Error {}
@@ -235,6 +236,23 @@ function parseShell(src, depth = 0) {
         continue;
       }
       if (c === "(") {
+        const plain = word && !word.quoted && !word.dynamic;
+        if (plain && /^[A-Za-z_][A-Za-z0-9_]*\+?=$/.test(word.text)) {
+          // Array assignment NAME=(...): elements are parsed (and checked) like a command.
+          i++;
+          parseUntil(")");
+          dyn();
+          atWordStart = false;
+          continue;
+        }
+        if (plain && /^[A-Za-z_][\w.:-]*$/.test(word.text) && s[i + 1] === ")") {
+          // Function definition name() { ...; }: the body is parsed as commands.
+          word = null;
+          i += 2;
+          endCmd();
+          atWordStart = true;
+          continue;
+        }
         if (word) throw new ShellParseError("unexpected (");
         endCmd();
         i++;
@@ -288,6 +306,91 @@ function parseShell(src, depth = 0) {
 }
 
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
+const PACKAGE_MANAGERS = new Set(["pnpm", "npm", "yarn"]);
+const MAX_SCRIPT_BYTES = 256 * 1024;
+const MAX_SCRIPT_FILES = 16;
+/** The repo's own bin/ (this file's directory): reviewed tooling, not re-parsed. */
+const TRUSTED_BIN = path.resolve(__dirname) + path.sep;
+
+function newContext(cwd = process.cwd()) {
+  return { cwd, filesRead: 0 };
+}
+
+/** Script text, or null when missing, too big, unreadable or over the per-line file budget. */
+function readScript(abs, ctx) {
+  try {
+    const st = fs.statSync(abs);
+    if (!st.isFile() || st.size > MAX_SCRIPT_BYTES || ++ctx.filesRead > MAX_SCRIPT_FILES) return null;
+    return fs.readFileSync(abs, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function isShellScript(abs) {
+  try {
+    const fd = fs.openSync(abs, "r");
+    const buf = Buffer.alloc(128);
+    const n = fs.readSync(fd, buf, 0, 128, 0);
+    fs.closeSync(fd);
+    const head = buf.subarray(0, n).toString("utf8");
+    if (head.startsWith("#!")) return /^#!\S*\b(env\s+)?(sh|bash|zsh|dash|ksh|mksh|ash)\b/.test(head.split("\n")[0]);
+    return /\.(sh|bash)$/.test(abs) || !head.includes("\0");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `pnpm test`, `pnpm run x`, `npm run x`, `yarn x`, ...: the package.json script text
+ * (pre/post hooks included), found from the nearest package.json at or above the dir.
+ * @returns {null | {indirect: string} | {scripts: [string, string|null][]}}
+ */
+function packageScript(words, ctx) {
+  const name = path.posix.basename(words[0].text);
+  let dir = ctx.cwd;
+  let i = 1;
+  let workspace = false;
+  for (; i < words.length && words[i].text.startsWith("-"); i++) {
+    const t = words[i].text;
+    const eq = /^--(dir|prefix|cwd)=(.*)$/.exec(t);
+    if (eq) dir = path.resolve(ctx.cwd, eq[2]);
+    else if (["-C", "--dir", "--prefix", "--cwd"].includes(t)) dir = path.resolve(ctx.cwd, words[++i]?.text ?? "");
+    else if (/^(-r|--recursive|-F|--filter|-w|--workspace|--workspaces|-ws)$/.test(t) || /^--(filter|workspace)=/.test(t)) {
+      workspace = true;
+      if (/^(-F|--filter|-w|--workspace)$/.test(t)) i++;
+    }
+  }
+  const sub = words[i];
+  if (!sub) return null;
+  let script = null;
+  let explicit = true;
+  if (sub.text === "run" || sub.text === "run-script") script = words.slice(i + 1).find((w) => !w.text.startsWith("-")) ?? null;
+  else if (["test", "t", "tst", "start", "stop", "restart"].includes(sub.text)) script = { ...sub, text: /^t(e?st)?$/.test(sub.text) ? "test" : sub.text };
+  else if (name !== "npm") {
+    script = sub; // pnpm/yarn run an unknown command as a script
+    explicit = false;
+  }
+  if (!script) return null;
+  if (script.dynamic || sub.dynamic) return { indirect: "a package script chosen by a variable" };
+  if (workspace) return { indirect: "a workspace-wide package script run (write the script's command instead)" };
+  let scripts = null;
+  for (let d = dir; ; d = path.dirname(d)) {
+    try {
+      scripts = JSON.parse(fs.readFileSync(path.join(d, "package.json"), "utf8")).scripts || {};
+      break;
+    } catch {
+      if (d === path.dirname(d)) break;
+    }
+  }
+  const body = scripts?.[script.text];
+  if (typeof body !== "string") return explicit ? { indirect: `a package script that cannot be resolved (${script.text})` } : null;
+  return {
+    scripts: ["pre", "", "post"]
+      .filter((p) => !p || typeof scripts[p + script.text] === "string")
+      .map((p) => [`the package script ${p + script.text}`, scripts[p + script.text]]),
+  };
+}
 const ASSIGN_RE = /^([A-Za-z_][A-Za-z0-9_]*)\+?=(.*)$/s;
 const lit = (text) => ({ text, dynamic: false });
 const base = (word) => path.posix.basename(word.text);
@@ -301,8 +404,8 @@ const base = (word) => path.posix.basename(word.text);
  * @returns {{assigns: {name: Word|null, value: Word, raw: Word}[], argv: Word[], nested: SimpleCommand[],
  *   indirect: string|null, viaXargs: boolean, stdinShell: boolean, cmd: SimpleCommand}}
  */
-function resolve(cmd, depth = 0) {
-  const r = { assigns: [], argv: [], nested: [], indirect: null, viaXargs: false, stdinShell: false, cmd };
+function resolve(cmd, depth = 0, ctx = newContext()) {
+  const r = { assigns: [], argv: [], nested: [], indirect: null, viaXargs: false, stdinShell: false, cmd, depth };
   let words = cmd.words.slice();
   const assignFrom = (wd) => {
     const m = ASSIGN_RE.exec(wd.text);
@@ -320,6 +423,32 @@ function resolve(cmd, depth = 0) {
   const nestScript = (script) => {
     if (script.dynamic) r.indirect = "a shell script built from variables or substitutions";
     else r.nested.push(...parseShell(script.text, depth + 1));
+  };
+  // Script text that comes from a file or package.json: parse it, or refuse it.
+  const nestText = (text, label) => {
+    if (text === null) {
+      r.indirect = `${label} that cannot be inspected`;
+      return;
+    }
+    try {
+      r.nested.push(...parseShell(text, depth + 1));
+    } catch (e) {
+      if (!(e instanceof ShellParseError)) throw e;
+      r.indirect = `${label} that cannot be parsed (${e.message})`;
+    }
+  };
+  // `bash file`, `source file`, `./file.sh`: read and parse the file, except the runners
+  // and the repo's own bin/ tooling (reviewed code, checked by its arguments instead).
+  const nestFile = (w, mustExist) => {
+    if (w.dynamic) {
+      r.indirect = "a script path built from variables or substitutions";
+      return;
+    }
+    const abs = path.resolve(ctx.cwd, w.text);
+    if (RUNNER_RE.test(path.basename(abs)) || abs.startsWith(TRUSTED_BIN)) return;
+    // Executed by path: missing = command not found; node/python/binaries are out of scope.
+    if (!mustExist && (!fs.existsSync(abs) || !isShellScript(abs))) return;
+    nestText(readScript(abs, ctx), `a script (${w.text})`);
   };
 
   for (let guard = 0; guard < 32 && words.length; guard++) {
@@ -384,9 +513,35 @@ function resolve(cmd, depth = 0) {
       words.shift();
       continue;
     }
-    if (name === "eval") {
-      nestScript({ text: words.slice(1).map((x) => x.text).join(" "), dynamic: words.slice(1).some((x) => x.dynamic) });
+    if (name === "eval" || name === "watch") {
+      words.shift();
+      if (name === "watch") skipOpts(["-n", "--interval", "-d", "--differences", "-q", "--equexit"]);
+      nestScript({ text: words.map((x) => x.text).join(" "), dynamic: words.some((x) => x.dynamic) });
       words = [];
+      break;
+    }
+    if (name === "find") {
+      // -exec/-execdir/-ok/-okdir run a command per match.
+      for (let i = 1; i < words.length; i++) {
+        if (!/^-(exec|execdir|ok|okdir)$/.test(words[i].text)) continue;
+        const sub = [];
+        for (i++; i < words.length && words[i].text !== ";" && words[i].text !== "+"; i++) if (words[i].text !== "{}") sub.push(words[i]);
+        if (sub.length) r.nested.push({ words: sub, redirects: [], heredocs: [], piped: false });
+      }
+      break;
+    }
+    if (name === "source" || name === ".") {
+      if (words[1]) nestFile(words[1], true);
+      break;
+    }
+    if (PACKAGE_MANAGERS.has(name)) {
+      const run = packageScript(words, ctx);
+      if (run?.indirect) r.indirect = run.indirect;
+      else if (run) for (const [label, text] of run.scripts) nestText(text, label);
+      break;
+    }
+    if (head.text.includes("/") && !SHELLS.has(name)) {
+      nestFile(head, false);
       break;
     }
     if (SHELLS.has(name)) {
@@ -414,7 +569,9 @@ function resolve(cmd, depth = 0) {
           r.indirect = "a shell reading its script from a pipe or file redirect";
         }
       }
-      continue; // `bash script.sh args` → analyse script.sh as the command
+      // `bash script.sh args`: parse the file, then analyse script.sh + args as the command.
+      if (words.length) nestFile(words[0], true);
+      break;
     }
     break;
   }
@@ -423,12 +580,15 @@ function resolve(cmd, depth = 0) {
 }
 
 /** Resolve every command on the line, nested ones included (depth-first). */
-function resolveAll(commands, depth = 0) {
+function resolveAll(commands, depth = 0, ctx = newContext()) {
   const all = [];
   for (const c of commands) {
-    const r = resolve(c, depth);
+    const r = resolve(c, depth, ctx);
     all.push(r);
-    if (r.nested.length) all.push(...resolveAll(r.nested, depth + 1));
+    if (r.nested.length) {
+      if (depth >= 8) throw new ShellParseError("nesting too deep");
+      all.push(...resolveAll(r.nested, depth + 1, ctx));
+    }
   }
   return all;
 }
@@ -453,6 +613,20 @@ function declarations(r) {
 const RUNNER_RE = /^(run-test\.sh|run-distributed\.sh|quick\.sh|run-regression\.sh|find-capacity\.js)$/;
 const GUARDED_TEXT_RE = /K6_ALLOW_PROD_LOAD|--unsafe|(^|[^A-Za-z0-9_.-])x?k6(\s|$)|run-test|run-distributed|find-capacity/;
 
+// Variables that make a shell or git run another program.
+const EXEC_ENV_RE = /^(BASH_ENV|ENV|LD_PRELOAD|LD_LIBRARY_PATH|PROMPT_COMMAND|PAGER|EDITOR|VISUAL|GIT_(PAGER|EDITOR|SEQUENCE_EDITOR|SSH|SSH_COMMAND|EXTERNAL_DIFF|ASKPASS|CONFIG_.*))$/;
+const GIT_EXEC_KEY_RE = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass)|alias\.|sequence\.editor|diff\.external|credential\.helper|gpg\.program|pager\.|.*\.(textconv|command|cmd|process|clean|smudge))/i;
+
+function gitRunsCommands(args) {
+  const texts = args.map((a) => a.text);
+  for (let i = 0; i < texts.length; i++) {
+    if (texts[i] === "-c" && GIT_EXEC_KEY_RE.test(texts[i + 1] ?? "")) return true;
+    if (texts[i].startsWith("--config-env")) return true;
+  }
+  const cfg = texts.indexOf("config");
+  return cfg !== -1 && texts.slice(cfg + 1).some((t) => GIT_EXEC_KEY_RE.test(t));
+}
+
 const isK6 = (w) => !w.dynamic && /^x?k6$/.test(base(w));
 const isRunner = (w) => !w.dynamic && RUNNER_RE.test(base(w));
 
@@ -461,11 +635,11 @@ const isRunner = (w) => !w.dynamic && RUNNER_RE.test(base(w));
  * @returns {{error: string|null, commands: ReturnType<typeof resolve>[], indirect: string|null,
  *   k6Load: boolean, prodLoad: {literalTrue: boolean, any: boolean}, runners: ReturnType<typeof resolve>[], unsafeFlag: boolean}}
  */
-function analyze(command) {
+function analyze(command, opts = {}) {
   const res = { error: null, commands: [], indirect: null, k6Load: false, prodLoad: { literalTrue: false, any: false }, runners: [], unsafeFlag: false };
   let commands;
   try {
-    commands = resolveAll(parseShell(command));
+    commands = resolveAll(parseShell(command), 0, newContext(opts.cwd));
   } catch (e) {
     if (!(e instanceof ShellParseError)) throw e;
     res.error = e.message;
@@ -486,6 +660,7 @@ function analyze(command) {
         else if (a.value.text === "true") res.prodLoad.literalTrue = true;
       }
       if (GUARDED_TEXT_RE.test(a.value.text)) flag(`a variable holding a guarded value (${a.name.text})`);
+      if (EXEC_ENV_RE.test(a.name.text)) flag(`${a.name.text}, which makes programs run another command`);
     }
     const [head, ...args] = r.argv;
     if (!head) continue;
@@ -494,6 +669,9 @@ function analyze(command) {
       continue;
     }
     const name = base(head);
+    if (head.text !== "[" && head.text !== "[[" && /[[\]?*{}]/.test(head.text)) flag("a command name with glob or brace characters");
+    if (name === "helm" && args.some((a) => a.text.startsWith("--post-renderer"))) flag("helm --post-renderer runs another program");
+    if (name === "git" && gitRunsCommands(args)) flag("git configured to run another command (pager, editor, alias, ...)");
     if (name === "alias" && args.some((a) => GUARDED_TEXT_RE.test(a.text))) flag("an alias for a guarded command");
     if (name === "source" || name === ".") line.sources = true;
     // `k6" "run x.js` is one word "k6 run": bash would fail to find it, but refuse it anyway.
