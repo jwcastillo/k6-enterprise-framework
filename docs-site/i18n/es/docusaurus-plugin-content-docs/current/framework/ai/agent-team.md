@@ -55,11 +55,24 @@ sintéticos.
    generado).
 
 El revisor, el operador y el descubridor llevan un hook `PreToolUse`
-(`bin/agent-bash-guard.js`): el revisor solo puede ejecutar validadores, escáneres,
-typecheck/lint/test y git de solo lectura; el operador nunca puede invocar `k6 run` /
-`k6 cloud` directamente ni definir `K6_ALLOW_PROD_LOAD`, y los comandos pesados,
-riesgosos (unsafe), de producción o de cambios en el cluster siempre piden confirmación; cada
-descubrimiento pide confirmar el alcance.
+(`bin/agent-bash-guard.js`). Parsea cada comando con el mismo parser de shell que el hook
+del repo (`bin/_shell-guard.js`), así las comillas, `bash -c`, `eval` y las variables no
+pueden esconder un comando, y deniega lo que no puede parsear.
+
+- Revisor: un solo comando, sin encadenar, pipes, redirecciones ni variables.
+  Exactamente `pnpm typecheck`, `pnpm lint`, `pnpm test [path...]` (sin flags, o sea sin
+  `--fix` ni `-u`), `validate-generated.js` con sus flags de solo lectura,
+  `detect-secrets.sh`, `scan-skills.sh` sin `--semantic`/`--sarif-dir`,
+  `skillspector scan --no-llm`, git de solo lectura y `ls`.
+- Operador: una allowlist — scripts del runner (`run-test.sh`, `quick.sh`,
+  `run-regression.sh`, `report.sh`, `compare.sh`, `run-distributed.sh`), herramientas
+  de reporte de solo lectura, `helm template|status|list|get`,
+  `kubectl get|describe|logs|top`, git de solo lectura y `cat`/`ls`/`head`/`tail` bajo
+  `reports/`. Los perfiles pesados, `--unsafe`, entornos de producción, búsqueda de
+  capacidad, corridas distribuidas y cambios con helm/kubectl piden confirmación al
+  humano. `k6 run` / `k6 cloud` directos, cualquier asignación de `K6_ALLOW_PROD_LOAD`,
+  la indirección y todo lo demás se deniegan.
+- Descubridor: cada descubrimiento pide confirmar el alcance.
 
 ## Agentes
 

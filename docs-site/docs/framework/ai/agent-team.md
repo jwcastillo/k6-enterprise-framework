@@ -49,10 +49,23 @@ scenarios, client libraries and synthetic data are committed.
    and deterministic tools (compare, trend, SLO report, generated analysis).
 
 The reviewer, operator and discoverer carry a `PreToolUse` hook
-(`bin/agent-bash-guard.js`): the reviewer may only run validators, scanners,
-typecheck/lint/test and read-only git; the operator can never call raw `k6 run` /
-`k6 cloud` or set `K6_ALLOW_PROD_LOAD`, and heavy, unsafe, production and cluster
-commands always prompt the human; every discovery run prompts for scope confirmation.
+(`bin/agent-bash-guard.js`). It parses each command with the same shell parser as the
+repo hook (`bin/_shell-guard.js`), so quoting, `bash -c`, `eval` and variables cannot
+hide a command, and it denies anything it cannot parse.
+
+- Reviewer: one command, no chaining, pipes, redirection or variables. Exactly
+  `pnpm typecheck`, `pnpm lint`, `pnpm test [path...]` (no flags, so no `--fix` or `-u`),
+  `validate-generated.js` with its read-only flags, `detect-secrets.sh`,
+  `scan-skills.sh` without `--semantic`/`--sarif-dir`, `skillspector scan --no-llm`,
+  read-only git and `ls`.
+- Operator: an allowlist — runner scripts (`run-test.sh`, `quick.sh`,
+  `run-regression.sh`, `report.sh`, `compare.sh`, `run-distributed.sh`), read-only
+  report tools, `helm template|status|list|get`, `kubectl get|describe|logs|top`,
+  read-only git and `cat`/`ls`/`head`/`tail` under `reports/`. Heavy profiles,
+  `--unsafe`, production environments, capacity search, distributed runs and
+  helm/kubectl changes prompt the human. Raw `k6 run` / `k6 cloud`, any
+  `K6_ALLOW_PROD_LOAD` assignment, indirection and everything else are denied.
+- Discoverer: every discovery run prompts for scope confirmation.
 
 ## Agents
 

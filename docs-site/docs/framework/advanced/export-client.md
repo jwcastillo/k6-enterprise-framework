@@ -140,7 +140,7 @@ With capabilities enabled, additional files appear:
 | `--with-reports` | `bin/report.sh` |
 | `--with-observability` | `bin/observability.sh`, `infrastructure/` |
 | `--with-binary` | `bin/build-binary.sh` |
-| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.json` (guardrail hooks, plugin declaration, narrow allow list), `.claude/hooks/guardrails.js`, `.claude/agents/`, `.claude/skills/`, `bin/validate-generated.js` + `bin/_secret-patterns.js` + `bin/_help.js` (generation gate), `bin/scan-skills.sh`, `bin/agent-bash-guard.js`, `security/baselines/*.yaml`, `security/skillspector-triage.md` |
+| `--with-claude` | `.claude/CLAUDE.md`, `.claude/settings.json` (guardrail hooks, plugin declaration, narrow allow list), `.claude/hooks/guardrails.js`, `.claude/agents/`, `.claude/skills/`, `bin/validate-generated.js` + `bin/_secret-patterns.js` + `bin/_help.js` (generation gate), `bin/scan-skills.sh`, `bin/agent-bash-guard.js` + `bin/_shell-guard.js` (shell parser shared with the hook), `security/baselines/*.yaml`, `security/skillspector-triage.md` |
 
 `--with-claude` no longer writes `.claude/settings.local.json` (a per-user file). The
 exported `.claude/settings.json` only pre-approves the wrapper scripts (`./bin/run-test.sh`,

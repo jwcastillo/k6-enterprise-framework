@@ -134,12 +134,23 @@ text surfaces it again for review.
 | --- | --- | --- |
 | PreToolUse | `Bash` | `k6 run` / `k6 cloud` called directly — use `./bin/run-test.sh`, which applies target-guard, scenario gates and reports |
 | PreToolUse | `Bash` | `--unsafe` or `K6_ALLOW_PROD_LOAD=true`, unless the human started Claude Code with `K6_AGENT_ALLOW_UNSAFE=1` exported in their own shell |
-| PreToolUse | `Write\|Edit\|MultiEdit` | `*.har` and `replay-*.json` written to a path git does not ignore (use `data/` or `reports/`) |
+| PreToolUse | `Bash` | indirection that could produce either of the above: a command name from a variable or substitution, variables in the arguments of `k6` or the runners, a variable holding a guarded value (`V=--unsafe`), `export "$V=..."`, `xargs` driving the runner, a shell reading its script from a pipe, `source` on the same line as a run |
+| PreToolUse | `Write\|Edit\|MultiEdit` | recorded traffic and browser state — `*.har`, `*.har.json`, `*.har.gz`, `replay-*.json`, Playwright traces (`trace.zip`, `*.trace.zip`) and storage/auth state (`storage-state*.json`, `storageState*.json`, `*auth*state*.json`) — written to a path git does not ignore, or where `git check-ignore` cannot answer (use `data/` or `reports/`) |
 | PostToolUse | `Write\|Edit\|MultiEdit` | nothing — runs `validate-generated.js --kind=scenario --no-build` on `scenarios/**` and `clients/*/scenarios/**` and reports failures back to the agent |
 
-Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent) and
-fail open on their own errors, so a broken hook never wedges a session. They match the
-command text, so a message that merely quotes `k6 run` is blocked too — rephrase it.
+The Bash hook parses the command with `bin/_shell-guard.js` (no dependencies, so it works
+before `pnpm install`) and decides on the words bash would run: quotes are removed, and
+`sh|bash|zsh -c`, `eval`, `env -S`, `$(...)`, backticks and heredocs fed to a shell are
+parsed as commands too. So `bash -c "..."` or a split `k6" "run` is caught, while a commit
+message or `echo` that only quotes `k6 run` passes. A denied indirection says
+"indirection not allowed; write the command literally".
+
+Hooks fail closed on a detected violation (exit `2`, the reason goes back to the agent),
+on a command they cannot parse when it mentions k6 or the runners, and when
+`bin/_shell-guard.js` is missing. They fail open on their own internal errors, so a
+broken hook never wedges a session. The hook is a guardrail, not a sandbox: it does not
+read script files (`bash some-script.sh` is checked as that script's arguments) or what
+`node -e` / `python -c` do.
 
 ## For client repos
 

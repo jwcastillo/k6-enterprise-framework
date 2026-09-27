@@ -44,8 +44,8 @@ modelo ve las claves (`query`, `email`), nunca los valores.
    falta contenido.
 2. **Filtrar** — los elementos que coinciden con `--deny-text` se quitan antes de que el
    decisor los vea.
-3. **Redactar** — los valores de `--data` pasan a `{{clave}}`; emails, JWTs, tokens opacos y
-   secuencias de 4+ dígitos se reemplazan. Cookies y headers nunca forman parte de la observación.
+3. **Redactar** — los valores de `--data` pasan a `{{clave}}`; emails, JWTs, ids opacos (10+
+   caracteres que mezclan letras y dígitos) y secuencias de 4+ dígitos se reemplazan. Cookies y headers nunca forman parte de la observación.
 4. **Decidir** — el decisor responde `click | fill | select | check | navigate_done | stop`,
    un índice de candidato, una clave de valor y una justificación.
 5. **Proteger** — un índice inválido, una clave desconocida o una confianza bajo
@@ -79,7 +79,8 @@ Los tests inyectan un decisor guionado; no hace falta ninguna key para correrlos
 | `--decider` | `claude` | `claude` o `jev`. |
 | `--data` | — | Objeto JSON de valores de prueba con nombre. |
 | `--max-steps` | `30` | Máximo de acciones. |
-| `--allow-hosts` | — | Hosts extra a los que puede navegar el frame principal; cualquier otro se aborta y detiene la corrida. |
+| `--allow-hosts` | — | Hosts extra a los que puede navegar el frame principal; una navegación a cualquier otro se aborta y detiene la corrida. Por defecto esto controla **solo la navegación del frame principal**: los subrecursos (XHR/fetch, scripts, imágenes, iframes) hacia otros hosts igual cargan. |
+| `--strict-hosts` | apagado | Aborta **todos** los requests (subrecursos incluidos) a hosts fuera del host inicial y de `--allow-hosts`. Usarlo cuando las llamadas a terceros no deben salir del navegador; las páginas que dependen de un CDN pueden romperse. |
 | `--block-hosts` | — | Hosts (comodines `*.x.com`) cuyos requests se abortan, en todas las páginas del contexto. |
 | `--stop-at` | — | Regex repetible; cuando la URL coincide, registra y se detiene. |
 | `--deny-text` | pay, buy, purchase, checkout, confirm/place order, delete, … | Elementos cuyo nombre o texto coincide nunca se ofrecen. |
