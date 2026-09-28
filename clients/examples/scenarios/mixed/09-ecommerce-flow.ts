@@ -16,12 +16,12 @@
  *   K6_PYROSCOPE_ENABLED=true      — inject X-Pyroscope-App-Name headers
  *
  * Run (standalone):
- *   ./bin/run-test.sh --client=examples --scenario=mixed/09-ecommerce-flow --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=09-ecommerce-flow --profile=smoke
  *
  * Run (with observability stack):
  *   docker compose --profile observability up -d
  *   K6_TEMPO_ENABLED=true K6_STRUCTURED_LOGS=true K6_PYROSCOPE_ENABLED=true \
- *     ./bin/run-test.sh --client=examples --scenario=mixed/09-ecommerce-flow --profile=smoke
+ *     ./bin/run-test.sh --client=examples --scenario=09-ecommerce-flow --profile=smoke
  */
 
 import http from "k6/http";

@@ -13,7 +13,7 @@
  *   2. "browser_vitals" — Chromium browser collecting Web Vitals (constant-vus)
  *
  * Run:
- *   ./bin/run-test.sh --client=examples --scenario=mixed/99-full-dashboard-demo --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=99-full-dashboard-demo --profile=smoke
  *
  * Expected panels populated:
  *   ✓ KPI strip (Checks, Avg, p95, p99, Error Rate, Throughput, APDEX, SLA)

@@ -34,15 +34,17 @@ Los escenarios estan organizados por complejidad: **Basico -> Intermedio -> Avan
 | 06 | `api/06-weighted-execution.ts` | constant-vus | HTTP | Intermedio | Distribucion ponderada de escenarios | `--scenario=api/06-weighted-execution` |
 | 07 | `api/07-structured-logging.ts` | constant-vus | HTTP | Intermedio | Logs JSON estructurados | `--scenario=api/07-structured-logging` |
 | 08 | `api/08-rate-limiting.ts` | constant-vus | HTTP | Intermedio | Manejo de 429, deteccion de throttle | `--scenario=api/08-rate-limiting` |
-| 09 | `mixed/09-ecommerce-flow.ts` | ramping-vus | HTTP | Avanzado | Flujo de usuario multi-paso | `--scenario=mixed/09-ecommerce-flow` |
+| 09 | `mixed/09-ecommerce-flow.ts` | ramping-vus | HTTP | Avanzado | Flujo de usuario multi-paso | `--scenario=09-ecommerce-flow` |
 | 10 | `api/10-graphql.ts` | constant-vus | GraphQL | Avanzado | Query + mutation, variables | `--scenario=api/10-graphql` |
 | 11 | `api/11-file-upload.ts` | constant-vus | HTTP | Avanzado | Upload multipart/form-data | `--scenario=api/11-file-upload` |
-| 12 | `integration/12-websocket.ts` | constant-vus | WebSocket | Avanzado | Connect, send, receive, close | `--scenario=integration/12-websocket` |
-| 13 | `mixed/13-multi-protocol.ts` | ramping-vus | HTTP+WS | Avanzado | Carga de trabajo multi-protocolo | `--scenario=mixed/13-multi-protocol` |
+| 12 | `integration/12-websocket.ts` | constant-vus | WebSocket | Avanzado | Connect, send, receive, close | `--scenario=12-websocket` |
+| 13 | `mixed/13-multi-protocol.ts` | ramping-vus | HTTP+WS | Avanzado | Carga de trabajo multi-protocolo | `--scenario=13-multi-protocol` |
 | 14 | `api/14-advanced-headers.ts` | constant-vus | HTTP | Intermedio | Headers custom, tracing | `--scenario=api/14-advanced-headers` |
-| 15 | `integration/15-smoke-baseline.ts` | constant-vus | HTTP | Basico | Smoke baseline (gate CI) | `--scenario=integration/15-smoke-baseline` |
-| 16 | `integration/16-sli-monitoring.ts` | ramping-vus | HTTP | Avanzado | Tracking de SLIs, thresholds SLO, error budget | `--scenario=integration/16-sli-monitoring` |
-| 99 | `mixed/99-full-dashboard-demo.ts` | constant-vus | HTTP+Browser | Avanzado | Grupos, Metricas Custom, Web Vitals, thresholds SLA | `--scenario=mixed/99-full-dashboard-demo` |
+| 15 | `integration/15-smoke-baseline.ts` | constant-vus | HTTP | Basico | Smoke baseline (gate CI) | `--scenario=15-smoke-baseline` |
+| 16 | `integration/16-sli-monitoring.ts` | ramping-vus | HTTP | Avanzado | Tracking de SLIs, thresholds SLO, error budget | `--scenario=16-sli-monitoring` |
+| 99 | `mixed/99-full-dashboard-demo.ts` | constant-vus | HTTP+Browser | Avanzado | Grupos, Metricas Custom, Web Vitals, thresholds SLA | `--scenario=99-full-dashboard-demo` |
+
+> **Nota:** `integration/` y `mixed/` son carpetas heredadas, no buckets canonicos (`api`, `flow`, `domain`, `chaos`, `perf`). `bin/run-test.sh` rechaza `--scenario=integration/...` o `--scenario=mixed/...` con "invalid bucket", asi que esos escenarios se corren por nombre (`--scenario=15-smoke-baseline`); el runner resuelve el archivo dentro de `scenarios/`.
 
 ---
 
@@ -69,7 +71,7 @@ Flujos de usuario completos, GraphQL, WebSockets, cargas multi-protocolo y el de
 El escenario `99-full-dashboard-demo` ejercita TODOS los paneles del reporte y dashboards Grafana:
 
 ```bash
-./bin/run-test.sh --client=examples --scenario=mixed/99-full-dashboard-demo --profile=smoke
+./bin/run-test.sh --client=examples --scenario=99-full-dashboard-demo --profile=smoke
 ```
 
 Incluye: 5 grupos con checks, 6 metricas custom (2 Counters, 2 Trends, Rate, Gauge), Web Vitals via Chromium, y thresholds SLA con mix de pass/fail.
@@ -85,7 +87,7 @@ Los escenarios 09 y 16 incluyen instrumentacion completa de observabilidad (traz
 docker compose --profile observability up -d
 
 # 2. Ejecutar con observabilidad completa
-./bin/run-test.sh --client=examples --scenario=integration/16-sli-monitoring \
+./bin/run-test.sh --client=examples --scenario=16-sli-monitoring \
   --profile=smoke --observability
 
 # 3. Ver datos en Grafana (http://localhost:3000):

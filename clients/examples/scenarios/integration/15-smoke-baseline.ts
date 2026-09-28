@@ -10,7 +10,7 @@
  *   - Error rate < 1%
  *
  * Run:
- *   ./bin/run-test.sh --client=examples --scenario=integration/15-smoke-baseline --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=15-smoke-baseline --profile=smoke
  */
 
 import http from "k6/http";

@@ -310,13 +310,13 @@ ${BOLD}── Examples ───────────────────
   ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --skip-build
 
   # Full production load test with debug output
-  ./bin/run-test.sh --client=myapp --scenario=integration/auth-flow --profile=stress --debug
+  ./bin/run-test.sh --client=myapp --scenario=flow/auth-flow --profile=stress --debug
 
   # Use YAML scenario definition
   ./bin/run-test.sh --client=myapp --scenario=tests/api-test.yaml --profile=smoke
 
   # Full observability stack (Prometheus + Loki + Tempo + OTEL)
-  ./bin/run-test.sh --client=examples --scenario=integration/16-sli-monitoring --observability
+  ./bin/run-test.sh --client=examples --scenario=16-sli-monitoring --observability
 
   # Send logs to Loki only
   ./bin/run-test.sh --client=examples --scenario=api/smoke-users --loki
@@ -473,7 +473,7 @@ if [[ -z "${SCENARIO}" ]]; then
   echo ""
   echo -e "  ${BOLD}Examples:${RESET}"
   echo -e "    ./bin/run-test.sh --client=_reference --scenario=api/smoke-users"
-  echo -e "    ./bin/run-test.sh --client=myapp --scenario=integration/auth-flow --profile=load"
+  echo -e "    ./bin/run-test.sh --client=myapp --scenario=flow/auth-flow --profile=load"
   echo ""
   echo -e "  Run ${CYAN}./bin/run-test.sh --help${RESET} for full usage."
   exit 1

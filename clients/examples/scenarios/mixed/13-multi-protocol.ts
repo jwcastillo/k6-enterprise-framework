@@ -9,7 +9,7 @@
  * Demonstrates: multi-protocol in one VU function, group timing
  *
  * Run:
- *   ./bin/run-test.sh --client=examples --scenario=mixed/13-multi-protocol --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=13-multi-protocol --profile=smoke
  */
 
 import http from "k6/http";
