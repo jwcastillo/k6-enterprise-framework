@@ -6,8 +6,18 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { EventEmitter } from "events";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
-const { evaluateSummary, search, usesProfileOptions, scenarioSourcePath } = require("../../bin/find-capacity.js");
+const {
+  evaluateSummary,
+  search,
+  createRunStep,
+  usesProfileOptions,
+  scenarioSourcePath,
+} = require("../../bin/find-capacity.js");
 
 const summaryAt = (iterations: number, extra: Record<string, unknown> = {}) => ({
   metrics: {
@@ -150,5 +160,63 @@ describe("scenarioSourcePath", () => {
   it("keeps an explicit extension", () => {
     expect(scenarioSourcePath("my-team", "api/checkout.ts")).toMatch(/checkout\.ts$/);
     expect(scenarioSourcePath("my-team", "api/checkout.js")).toMatch(/checkout\.js$/);
+  });
+});
+
+describe("createRunStep", () => {
+  /** A fake spawn: records the launch, writes a passing summary and exits 0. */
+  const fakeSpawn = (artifactsDir: string, launches: { args: string[]; env: Record<string, string> }[]) =>
+    (_cmd: string, args: string[], options: { env: Record<string, string> }) => {
+      launches.push({ args, env: options.env });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(),
+        stderr: new EventEmitter(),
+      });
+      setImmediate(() => {
+        const rps = Number(options.env["K6_ARRIVAL_RATE"]);
+        fs.writeFileSync(
+          path.join(artifactsDir, `summary-${launches.length}.json`),
+          JSON.stringify({ metrics: { iterations: { count: rps * 10 } } })
+        );
+        child.emit("close", 0);
+      });
+      return child;
+    };
+
+  const opts = {
+    client: "_reference",
+    scenario: "perf/capacity",
+    env: "default",
+    profile: "throughput-medium",
+    stepDuration: 10,
+    minAchievedRatio: 0.95,
+  };
+
+  it("turns off the runner's auto-comparison on every step, even if the caller turned it on", async () => {
+    // Steps at different rates are not a baseline for each other: 40 rps compared with
+    // 20 rps flags a higher p50 as a critical regression, the runner exits 1 and the
+    // search aborts. See H21.
+    const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), "find-capacity-"));
+    const launches: { args: string[]; env: Record<string, string> }[] = [];
+    const previous = process.env["K6_SKIP_COMPARE"];
+    process.env["K6_SKIP_COMPARE"] = "false";
+    try {
+      const runStep = createRunStep(opts, artifactsDir, fakeSpawn(artifactsDir, launches));
+      const first = await runStep(20);
+      const second = await runStep(40);
+
+      expect(first.passed).toBe(true);
+      expect(second.passed).toBe(true);
+      expect(launches).toHaveLength(2);
+      for (const launch of launches) expect(launch.env["K6_SKIP_COMPARE"]).toBe("true");
+      expect(launches.map((l) => l.env["K6_ARRIVAL_RATE"])).toEqual(["20", "40"]);
+      // Built once, reused afterwards
+      expect(launches[0].args).not.toContain("--skip-build");
+      expect(launches[1].args).toContain("--skip-build");
+    } finally {
+      if (previous === undefined) delete process.env["K6_SKIP_COMPARE"];
+      else process.env["K6_SKIP_COMPARE"] = previous;
+      fs.rmSync(artifactsDir, { recursive: true, force: true });
+    }
   });
 });
