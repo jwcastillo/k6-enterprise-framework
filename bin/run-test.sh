@@ -1116,8 +1116,7 @@ else
   # Run auth check and capture the resolved userId in one call via --print-user.
   # Output goes to stdout (userId) and stderr (error messages); both are captured.
   _AUTH_OUT=$(K6_AUTH_TOKEN_PROVIDED="${AUTH_TOKEN_PROVIDED:-}" \
-    node "${SCRIPT_DIR}/check-cli-auth.js" --print-user 2>&1)
-  _AUTH_EXIT=$?
+    node "${SCRIPT_DIR}/check-cli-auth.js" --print-user 2>&1) && _AUTH_EXIT=0 || _AUTH_EXIT=$?
   if [[ ${_AUTH_EXIT} -eq 0 ]]; then
     # Last line of output is the userId when --print-user succeeds; any preceding
     # lines are informational log output from ts-node loader.
