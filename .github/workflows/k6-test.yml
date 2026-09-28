@@ -116,10 +116,15 @@ jobs:
         run: sudo install -m 0755 "$(command -v k6)" /usr/local/bin/k6
 
       - name: Validate workflow inputs
-        # T-140: Sanitize inputs from workflow_dispatch before use in shell
+        # T-140: Sanitize inputs from workflow_dispatch before use in shell.
+        # Los inputs llegan por env: interpolados en el script, la inyección ocurría
+        # en la asignación, antes de que la validación pudiera correr.
+        env:
+          IN_PROFILE: ${{ inputs.profile || 'smoke' }}
+          IN_SCENARIO: ${{ inputs.scenario || 'api/smoke-users' }}
         run: |
-          PROFILE="${{ inputs.profile || 'smoke' }}"
-          SCENARIO="${{ inputs.scenario || 'api/smoke-users' }}"
+          PROFILE="${IN_PROFILE}"
+          SCENARIO="${IN_SCENARIO}"
           if [[ ! "${PROFILE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
             echo "ERROR: Invalid profile input: ${PROFILE}" >&2
             exit 1

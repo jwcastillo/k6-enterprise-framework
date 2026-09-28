@@ -97,10 +97,14 @@ jobs:
         run: npm run build
 
       - name: Validate client config
+        env:
+          # Inputs por env, nunca interpolados en el script (inyección de shell).
+          IN_CLIENT: ${{ github.event.inputs.client }}
+          IN_ENV: ${{ github.event.inputs.env }}
         run: |
           node bin/validate-config.js \
-            --client="${{ github.event.inputs.client }}" \
-            --env="${{ github.event.inputs.env }}"
+            --client="${IN_CLIENT}" \
+            --env="${IN_ENV}"
 
       - name: Run smoke test
         id: run-test
@@ -108,26 +112,33 @@ jobs:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
           NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
           NOTIFY_WEBHOOK_URL: ${{ secrets.PERF_NOTIFY_WEBHOOK }}
+          IN_CLIENT: ${{ github.event.inputs.client }}
+          IN_ENV: ${{ github.event.inputs.env }}
+          IN_PROFILE: ${{ github.event.inputs.profile }}
+          IN_NOTIFY: ${{ github.event.inputs.notify }}
+          IN_TEST: ${{ github.event.inputs.test }}
         run: |
           ARGS=(
-            "--client=${{ github.event.inputs.client }}"
-            "--env=${{ github.event.inputs.env }}"
-            "--profile=${{ github.event.inputs.profile }}"
-            "--notify=${{ github.event.inputs.notify }}"
-            "--out=json=reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.json"
+            "--client=${IN_CLIENT}"
+            "--env=${IN_ENV}"
+            "--profile=${IN_PROFILE}"
+            "--notify=${IN_NOTIFY}"
+            "--out=json=reports/smoke-${IN_CLIENT}-${{ github.run_id }}.json"
           )
-          if [[ -n "${{ github.event.inputs.test }}" ]]; then
-            ARGS+=("--test=${{ github.event.inputs.test }}")
+          if [[ -n "${IN_TEST}" ]]; then
+            ARGS+=("--test=${IN_TEST}")
           fi
           bash bin/run-test.sh "${ARGS[@]}"
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Generate HTML report
         if: always()
+        env:
+          IN_CLIENT: ${{ github.event.inputs.client }}
         run: |
           node bin/generate-report.js \
-            --input "reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.json" \
-            --output "reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.html" \
+            --input "reports/smoke-${IN_CLIENT}-${{ github.run_id }}.json" \
+            --output "reports/smoke-${IN_CLIENT}-${{ github.run_id }}.html" \
             --type smoke || true
 
       - name: Upload test report
@@ -141,6 +152,11 @@ jobs:
       - name: Post result summary
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # Inputs por env: interpolarlos en el script abre inyección de JavaScript.
+          IN_CLIENT: ${{ github.event.inputs.client }}
+          IN_ENV: ${{ github.event.inputs.env }}
+          IN_PROFILE: ${{ github.event.inputs.profile }}
         with:
           script: |
             const exitCode = '${{ steps.run-test.outputs.exit_code }}';
@@ -149,9 +165,9 @@ jobs:
 
             | Field        | Value |
             |---|---|
-            | Client       | \`${{ github.event.inputs.client }}\` |
-            | Environment  | \`${{ github.event.inputs.env }}\` |
-            | Profile      | \`${{ github.event.inputs.profile }}\` |
+            | Client       | \`${process.env.IN_CLIENT}\` |
+            | Environment  | \`${process.env.IN_ENV}\` |
+            | Profile      | \`${process.env.IN_PROFILE}\` |
             | Exit code    | \`${exitCode}\` |
             | Run ID       | [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
