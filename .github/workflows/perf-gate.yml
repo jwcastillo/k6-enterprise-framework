@@ -2,6 +2,8 @@
 #
 # Trigger: pull_request (runs on every PR against main/develop)
 # Blocks merge if the quality gate fails (any non-zero exit from bin/run-test.sh).
+# Before gating, bin/testing/gate-selftest.sh proves the gate can fail: a gate that
+# never goes red is not a gate.
 #
 # Secrets required:
 #   PERF_SLACK_WEBHOOK  — Slack webhook for PR notifications (optional)
@@ -87,6 +89,16 @@ jobs:
 
       - name: Build TypeScript
         run: npm run build
+
+      # H10: el gate prueba que puede fallar antes de usarlo. Levanta bin/mock-server.js
+      # en 127.0.0.1 y exige 0 (sano), 99 (errores inyectados) y 1 (latencia inyectada).
+      # Tres corridas de 20 s; hoy tarda ~10 min porque _run_timed espera su timeout
+      # completo (60 s de auto-compare + 120 s de reportes) en cada corrida.
+      - name: Gate self-test (the gate must be able to fail)
+        timeout-minutes: 15
+        env:
+          K6_RBAC_PERMISSIVE: "true"
+        run: bash bin/testing/gate-selftest.sh
 
       - name: Run quality gate (smoke profile)
         id: quality-gate
