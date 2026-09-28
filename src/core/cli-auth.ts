@@ -244,24 +244,27 @@ export function authorizeBotCommand(ctx: BotCommandContext): BotAuthResult {
 /**
  * SHA-256 hashes of permitted inline <script> bodies in HTML reports (CR-01).
  *
- * These are the hashes of the two executable inline scripts embedded by the k6
- * web-dashboard export (K6_WEB_DASHBOARD_EXPORT) for k6 v1.x:
- *   - The bundled dashboard JS application (~147 KB, type="module")
- *   - The DOM helper script (~2.3 KB, no type attribute)
+ * The HTML report is the k6 web-dashboard export (K6_WEB_DASHBOARD_EXPORT). k6
+ * already separates code from data: the run data travels in
+ * `<script id="data" type="application/json; charset=utf-8; gzip; base64">`
+ * (a non-executable data block, skipped below), and the only executable inline
+ * script is the dashboard application, which is identical on every run for a
+ * given dashboard bundle. So the hash does not change per run; it changes when
+ * k6 ships a new dashboard bundle (as it did between k6 v1.x and v2.x).
  *
- * Non-executable script types (application/json, application/ld+json, etc.) are
- * skipped before this check — they are data blobs, not executable code.
- *
- * How to add a new hash when a legitimate inline script is introduced:
- *   node -e "const c=require('crypto'),fs=require('fs');
- *     const re=/<script([^>]*)>([\s\S]*?)<\/script>/gi;
- *     const html=fs.readFileSync('report.html','utf-8');
- *     let m; while((m=re.exec(html))!==null){
- *       const trimmed=m[2].trim(); if(!trimmed) continue;
- *       const hash=c.createHash('sha256').update(trimmed).digest('hex');
- *       console.log(hash, m[1].trim() || '(no attrs)', trimmed.length,'chars');
- *     }"
- * Then append the resulting hex string to the Set below.
+ * How to add a new hash after a k6 upgrade (review the bundle first):
+ *   1. Run any scenario; the report lands as html-report-*.html.quarantined.
+ *   2. node -e "const c=require('crypto'),fs=require('fs');
+ *        const re=/<script([^>]*)>([\s\S]*?)<\/script>/gi;
+ *        const html=fs.readFileSync('report.html','utf-8');
+ *        let m; while((m=re.exec(html))!==null){
+ *          const trimmed=m[2].trim(); if(!trimmed) continue;
+ *          const hash=c.createHash('sha256').update(trimmed).digest('hex');
+ *          console.log(hash, m[1].trim() || '(no attrs)', trimmed.length,'chars');
+ *        }"
+ *   3. Append the hash of the type="module" script to the Set below, with the
+ *      k6 versions it was verified on. test/core/report-xss-guard.test.ts runs
+ *      the installed k6 and fails until you do.
  */
 const ALLOWED_INLINE_SCRIPT_HASHES = new Set<string>([
   // SHA-256("") — safety net (empty trimmed bodies never reach this check)
@@ -270,13 +273,70 @@ const ALLOWED_INLINE_SCRIPT_HASHES = new Set<string>([
   "ffa09d2736d152c3f9f8f6d64bd9feaab7023cd166f7226decd08278759b916b",
   // k6 web-dashboard v1.x: DOM helper script (~2.3 KB, no type attribute)
   "c6241047be3f780d041aff457bf49d87cd41f5629c74d6f4f611537da65b54bf",
+  // k6 web-dashboard v2.x: bundled dashboard application (150732 chars, type="module").
+  // Verified on k6 v2.2.0 (darwin/amd64) and v2.3.0 (darwin/arm64). v2.x has no DOM helper.
+  "288d3fbb023a5e5f5aa0d0898150785aa85c138fb0c78255ec1baf75a080a73d",
 ]);
+
+/**
+ * JavaScript MIME type essences (WHATWG MIME Sniffing §4.6). A <script> whose
+ * type matches one of these (case-insensitive, no parameters) is executed by
+ * browsers, so all of them must be audited — not only text/javascript.
+ */
+const JS_MIME_ESSENCES = new Set<string>([
+  "application/ecmascript",
+  "application/javascript",
+  "application/x-ecmascript",
+  "application/x-javascript",
+  "text/ecmascript",
+  "text/javascript",
+  "text/javascript1.0",
+  "text/javascript1.1",
+  "text/javascript1.2",
+  "text/javascript1.3",
+  "text/javascript1.4",
+  "text/javascript1.5",
+  "text/jscript",
+  "text/livescript",
+  "text/x-ecmascript",
+  "text/x-javascript",
+]);
+
+/**
+ * Read one attribute from the raw attribute string of a start tag. Matches the
+ * attribute name exactly (so `data-type` is not `type`) and returns the first
+ * occurrence, as browsers do. Returns undefined when absent.
+ */
+function readTagAttribute(attrs: string, name: string): string | undefined {
+  const re = new RegExp(
+    `(?:^|[\\s/])${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))|(?:^|[\\s/])${name}(?=[\\s/]|$)`,
+    "i"
+  );
+  const m = re.exec(attrs);
+  if (!m) return undefined;
+  return m[1] ?? m[2] ?? m[3] ?? "";
+}
+
+/**
+ * Does the browser execute a <script> with this type attribute? Mirrors the
+ * HTML "prepare the script element" rules: absent/empty type, a JavaScript MIME
+ * essence, or "module" execute; "importmap" and "speculationrules" are not data
+ * blocks either (they change how code loads), so they are treated as executable.
+ * Anything else (application/json, …; gzip; base64, etc.) is an inert data block.
+ */
+function isExecutableScriptType(type: string | undefined): boolean {
+  if (type === undefined) return true;
+  const t = type.trim().toLowerCase();
+  if (t === "") return true;
+  return JS_MIME_ESSENCES.has(t) || t === "module" || t === "importmap" || t === "speculationrules";
+}
 
 /**
  * Verify that an HTML report file contains no unauthorized inline scripts.
  *
  * Inline <script> blocks are validated against a SHA-256 hash allowlist (CR-01).
  * External <script src="..."> blocks are allowed only for Chart.js paths.
+ * Non-executable data blocks (e.g. the k6 dashboard's JSON payload) are skipped.
  * All other script content is rejected as a violation.
  *
  * @param htmlPath - Absolute path to the HTML report file
@@ -297,10 +357,9 @@ export function auditHtmlReportForXss(htmlPath: string): string[] {
     const attrs = match[1] ?? "";
     const body = match[2] ?? "";
 
-    // External src= scripts
-    const srcMatch = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(attrs);
-    if (srcMatch) {
-      const src = srcMatch[1];
+    // External src= scripts (exact `src` attribute — `data-src` does not count)
+    const src = readTagAttribute(attrs, "src");
+    if (src !== undefined && src !== "") {
       // Allow only CDN-hosted Chart.js (or relative path for offline bundle)
       if (
         !src.includes("chart.js") &&
@@ -313,19 +372,10 @@ export function auditHtmlReportForXss(htmlPath: string): string[] {
       continue;
     }
 
-    // CR-01: skip non-executable script types (data blobs, JSON, etc. are not code)
-    // Only audit scripts with no type, type="text/javascript", type="application/javascript",
-    // or type="module". Everything else (application/json, application/ld+json, gzip, etc.)
-    // is a data container and must not be treated as executable inline script content.
-    const typeMatch = /\btype\s*=\s*["']([^"']+)["']/i.exec(attrs);
-    if (typeMatch) {
-      const scriptType = typeMatch[1].toLowerCase().trim();
-      const isExecutable =
-        scriptType === "text/javascript" ||
-        scriptType === "application/javascript" ||
-        scriptType === "module";
-      if (!isExecutable) continue; // data blob, JSON, etc. — not executable, skip
-    }
+    // CR-01: skip non-executable data blocks (application/json, …; gzip; base64).
+    // Everything the browser would run — any JS MIME essence, module, importmap —
+    // goes through the hash allowlist.
+    if (!isExecutableScriptType(readTagAttribute(attrs, "type"))) continue;
 
     // Inline script content — hash-based allowlist (CR-01: replaces bypassable substring heuristic)
     const trimmed = body.trim();
@@ -337,7 +387,8 @@ export function auditHtmlReportForXss(htmlPath: string): string[] {
       violations.push(
         `Unauthorized inline script (sha256:${scriptHash.slice(0, 16)}..., ${trimmed.length} chars). ` +
           `Only allowlisted scripts are permitted. ` +
-          `To permit this script, add sha256:${scriptHash} to ALLOWED_INLINE_SCRIPT_HASHES in cli-auth.ts.`
+          `If this is the k6 dashboard after a k6 upgrade, review it and add sha256:${scriptHash} ` +
+          `to ALLOWED_INLINE_SCRIPT_HASHES in cli-auth.ts.`
       );
     }
   }
