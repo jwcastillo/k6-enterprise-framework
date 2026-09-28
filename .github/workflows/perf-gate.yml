@@ -1,7 +1,7 @@
 # perf-gate.yml — Performance quality gate for Pull Requests
 #
 # Trigger: pull_request (runs on every PR against main/develop)
-# Blocks merge if quality gate fails (exit code 1).
+# Blocks merge if the quality gate fails (any non-zero exit from bin/run-test.sh).
 #
 # Secrets required:
 #   PERF_SLACK_WEBHOOK  — Slack webhook for PR notifications (optional)
@@ -23,6 +23,7 @@ on:
       - "src/**"
       - "clients/**"
       - "bin/**"
+      - ".github/workflows/perf-gate.yml"
 
   # Allow manual trigger for debugging
   workflow_dispatch:
@@ -109,6 +110,9 @@ jobs:
           SCENARIO="${IN_SCENARIO}"
           GATE_DIR="reports/gate-${{ github.run_id }}"
 
+          # El runner rechaza un --reports-dir cuyo padre no existe, y reports/ no
+          # esta en git: en un checkout limpio hay que crearlo.
+          mkdir -p "${GATE_DIR}"
           set +e
           bash bin/run-test.sh \
             --client="${CLIENT}" \
@@ -121,7 +125,7 @@ jobs:
 
           # El runner nombra los artefactos con un timestamp, asi que se busca el summary
           # en vez de construir la ruta.
-          SUMMARY="$(find "${GATE_DIR}" -name 'summary-*.json' 2>/dev/null | sort | tail -1)"
+          SUMMARY="$(find "${GATE_DIR}" -name 'summary-*.json' 2>/dev/null | sort | tail -1 || true)"
 
           # Codigos del runner: 0 = thresholds cumplidos, 99 = SLOs no cumplidos,
           # 1 = error o regresion critica, 107 = error de build/script.
@@ -136,9 +140,11 @@ jobs:
 
       - name: Generate quality gate report
         if: always() && steps.quality-gate.outputs.summary != ''
+        env:
+          SUMMARY: ${{ steps.quality-gate.outputs.summary }}
         run: |
           node bin/generate-report.js \
-            --input="${{ steps.quality-gate.outputs.summary }}" \
+            --input="${SUMMARY}" \
             --output="reports/gate-${{ github.run_id }}.html" || true
 
       - name: Upload gate report as artifact
@@ -154,17 +160,26 @@ jobs:
       - name: Post PR comment with results
         if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # Valores por env: interpolarlos en el script abre inyeccion de JavaScript.
+          GATE_PASSED: ${{ steps.quality-gate.outputs.gate_passed }}
+          EXIT_CODE: ${{ steps.quality-gate.outputs.exit_code }}
+          IN_ENV: ${{ github.event.inputs.env || 'staging' }}
+          IN_SCENARIO: ${{ github.event.inputs.scenario || 'domain/orders-lifecycle' }}
         with:
           script: |
-            const passed = '${{ steps.quality-gate.outputs.gate_passed }}' === 'true';
-            const exitCode = '${{ steps.quality-gate.outputs.exit_code }}';
+            const passed = process.env.GATE_PASSED === 'true';
+            const exitCode = process.env.EXIT_CODE;
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
 
+            // Mapa de salida de bin/run-test.sh (cabecera del script).
             const exitCodeDesc = {
               '0': 'All thresholds passed',
-              '1': 'One or more thresholds failed',
-              '2': 'Execution error',
-              '99': 'Threshold failure with partial data'
+              '1': 'Test/framework error or critical regression (auto-comparison)',
+              '99': 'Thresholds failed (SLOs not met) or baseline regression',
+              '107': 'Script/build error',
+              '108': 'Gated scenario without its unlock flag',
+              '109': 'Guarded run without a human approval'
             }[exitCode] || `Unknown (${exitCode})`;
 
             const body = `## ${passed ? '✅' : '❌'} Performance Quality Gate — ${passed ? 'PASS' : 'FAIL'}
@@ -172,8 +187,9 @@ jobs:
             | Field       | Value |
             |---|---|
             | Exit code   | \`${exitCode}\` — ${exitCodeDesc} |
+            | Scenario    | \`${process.env.IN_SCENARIO}\` |
             | Profile     | \`smoke\` |
-            | Environment | \`staging\` |
+            | Environment | \`${process.env.IN_ENV}\` |
             | Report      | [View artifacts](${runUrl}) |
 
             ${!passed ? '> ⚠️ **This PR is blocked pending performance regression fix.**\n> Review the threshold failures in the artifact report.' : '> All performance thresholds are within acceptable limits.'}
@@ -207,7 +223,9 @@ jobs:
 
       - name: Fail if quality gate did not pass
         if: steps.quality-gate.outputs.gate_passed != 'true'
+        env:
+          EXIT_CODE: ${{ steps.quality-gate.outputs.exit_code }}
         run: |
-          echo "::error::Performance quality gate FAILED (exit code: ${{ steps.quality-gate.outputs.exit_code }})"
+          echo "::error::Performance quality gate FAILED (exit code: ${EXIT_CODE})"
           echo "Review the performance report artifact for threshold details."
           exit 1
