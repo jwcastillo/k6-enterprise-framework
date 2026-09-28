@@ -21,6 +21,9 @@ Use as a starting point for new clients and to understand framework capabilities
 ## Running Scenarios
 
 ```bash
+# Identity for the reference RBAC (clients/_reference/config/rbac.json, role developer)
+export K6_USER=reference-dev
+
 # Basic (1-3): smoke test — fastest CI check (~1 min)
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
@@ -28,6 +31,7 @@ Use as a starting point for new clients and to understand framework capabilities
 ./bin/run-test.sh --client=_reference --scenario=integration/auth-flow --profile=load
 
 # Advanced (9-15): stress test — find breaking point (~25 min)
+# Needs role lead or admin: add your user to clients/_reference/config/rbac.json first
 ./bin/run-test.sh --client=_reference --scenario=mixed/checkout-flow --profile=stress
 
 # Run all reference scenarios

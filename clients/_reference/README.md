@@ -38,6 +38,9 @@ This `_reference/` client is the canonical layout — mirror its structure when 
 ## Running Scenarios
 
 ```bash
+# Identity for the reference RBAC (config/rbac.json, role developer)
+export K6_USER=reference-dev
+
 # Basic (1-3): smoke test — fastest CI check (~1 min)
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
@@ -45,6 +48,7 @@ This `_reference/` client is the canonical layout — mirror its structure when 
 ./bin/run-test.sh --client=_reference --scenario=integration/auth-flow --profile=load
 
 # Advanced (9-15): stress test — find breaking point (~25 min)
+# Needs role lead or admin: add your user to config/rbac.json first (see RBAC)
 ./bin/run-test.sh --client=_reference --scenario=mixed/checkout-flow --profile=stress
 
 # Run all reference scenarios
@@ -56,6 +60,40 @@ This `_reference/` client is the canonical layout — mirror its structure when 
 # With a specific environment
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke --env=staging
 ```
+
+## RBAC
+
+The runner checks RBAC before every run (Step 2b) and **fails closed**: a client without
+`config/rbac.json` cannot run anything unless `K6_RBAC_PERMISSIVE=true` is set.
+`_reference` ships a minimal `config/rbac.json` so the quick start works out of the box:
+
+```json
+{ "users": [ { "id": "reference-dev", "role": "developer" } ] }
+```
+
+- `reference-dev` is a shared, non-personal identity. Select it with `K6_USER=reference-dev`
+  (identity resolution: `K6_USER` > `$USER`).
+- `developer` is the lowest role: profiles `smoke`, `quick`, `load`, `throughput-low` and
+  `throughput-medium`. `stress`, `spike`, `capacity`, `breakpoint`, `soak`,
+  `throughput-high` and `throughput-ramp` are denied.
+- Because the file exists, `K6_RBAC_PERMISSIVE=true` no longer applies to `_reference`:
+  any user not listed is denied.
+
+To adjust it, add your own users and roles (`developer`, `lead`, `admin`), for example:
+
+```json
+{
+  "users": [
+    { "id": "reference-dev", "role": "developer" },
+    { "id": "your-login", "role": "lead", "email": "you@example.com" }
+  ]
+}
+```
+
+Roles and their permissions are built in (`src/core/rbac.ts`); the file only maps users to
+roles. When you copy `_reference` to start a real client, replace `reference-dev` with your
+team's users. `K6_USER` is read from the environment, so without `K6_AUTH_TOKEN` RBAC is a
+guardrail, not authentication.
 
 ## Common Errors
 
@@ -231,7 +269,8 @@ clients/_reference/
 ├── config/
 │   ├── default.json        # Local/dev environment config
 │   ├── staging.json        # Staging environment config
-│   └── production.json     # Production environment config
+│   ├── production.json     # Production environment config
+│   └── rbac.json           # Users → roles (see RBAC)
 ├── data/
 │   ├── users.csv           # Sample user data (no real passwords)
 │   └── products.json       # Sample product catalog

@@ -16,7 +16,9 @@ A unified, self-service enterprise load testing platform built on [Grafana k6](h
 # 1. Install dependencies
 npm install
 
-# 2. Run the reference smoke test
+# 2. Run the reference smoke test (reference-dev is the developer-role user in
+#    clients/_reference/config/rbac.json; RBAC fails closed without it)
+export K6_USER=reference-dev
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
 # 3. Run a consolidated artifact test

@@ -38,6 +38,9 @@ Este cliente `_reference/` es el layout canónico — replicar su estructura al 
 ## Ejecución de Escenarios
 
 ```bash
+# Identidad del RBAC de referencia (config/rbac.json, rol developer)
+export K6_USER=reference-dev
+
 # Básico (1-3): smoke test — verificación CI más rápida (~1 min)
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
@@ -45,6 +48,7 @@ Este cliente `_reference/` es el layout canónico — replicar su estructura al 
 ./bin/run-test.sh --client=_reference --scenario=integration/auth-flow --profile=load
 
 # Avanzado (9-15): stress test — encontrar punto de ruptura (~25 min)
+# Requiere rol lead o admin: primero agrega tu usuario a config/rbac.json (ver RBAC)
 ./bin/run-test.sh --client=_reference --scenario=mixed/checkout-flow --profile=stress
 
 # Ejecutar todos los escenarios de referencia
@@ -56,6 +60,40 @@ Este cliente `_reference/` es el layout canónico — replicar su estructura al 
 # Con un entorno específico
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke --env=staging
 ```
+
+## RBAC
+
+El runner verifica el RBAC antes de cada corrida (paso 2b) y **falla cerrado**: un cliente
+sin `config/rbac.json` no puede correr nada salvo con `K6_RBAC_PERMISSIVE=true`.
+`_reference` trae un `config/rbac.json` mínimo para que el quick start funcione tal cual:
+
+```json
+{ "users": [ { "id": "reference-dev", "role": "developer" } ] }
+```
+
+- `reference-dev` es una identidad compartida, no personal. Se elige con
+  `K6_USER=reference-dev` (resolución de identidad: `K6_USER` > `$USER`).
+- `developer` es el rol más bajo: perfiles `smoke`, `quick`, `load`, `throughput-low` y
+  `throughput-medium`. Se niegan `stress`, `spike`, `capacity`, `breakpoint`, `soak`,
+  `throughput-high` y `throughput-ramp`.
+- Como el archivo existe, `K6_RBAC_PERMISSIVE=true` ya no aplica a `_reference`: cualquier
+  usuario que no esté en la lista queda denegado.
+
+Para ajustarlo, agrega tus usuarios y roles (`developer`, `lead`, `admin`), por ejemplo:
+
+```json
+{
+  "users": [
+    { "id": "reference-dev", "role": "developer" },
+    { "id": "tu-login", "role": "lead", "email": "tu@example.com" }
+  ]
+}
+```
+
+Los roles y sus permisos están definidos en el código (`src/core/rbac.ts`); el archivo solo
+asigna usuarios a roles. Si copias `_reference` para empezar un cliente real, reemplaza
+`reference-dev` por los usuarios de tu equipo. `K6_USER` se lee del entorno, así que sin
+`K6_AUTH_TOKEN` el RBAC es una barrera de seguridad, no autenticación.
 
 ## Errores Comunes
 
@@ -231,7 +269,8 @@ clients/_reference/
 ├── config/
 │   ├── default.json        # Configuración de entorno local/dev
 │   ├── staging.json        # Configuración de entorno staging
-│   └── production.json     # Configuración de entorno producción
+│   ├── production.json     # Configuración de entorno producción
+│   └── rbac.json           # Usuarios → roles (ver RBAC)
 ├── data/
 │   ├── users.csv           # Datos de usuarios de ejemplo (sin contraseñas reales)
 │   └── products.json       # Catálogo de productos de ejemplo

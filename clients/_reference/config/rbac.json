@@ -1,0 +1,6 @@
+{
+  "_comment": "Reference RBAC for the quick start. One non-personal identity with the lowest role (developer: smoke, quick, load, throughput-low, throughput-medium). Run with K6_USER=reference-dev. Real clients list their own users; see clients/_reference/README.md#rbac.",
+  "users": [
+    { "id": "reference-dev", "role": "developer" }
+  ]
+}

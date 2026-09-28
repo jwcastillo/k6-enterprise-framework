@@ -48,7 +48,7 @@ start_mock() {
 # run_test -> sets RUN_EXIT
 run_test() {
   API_BASE_URL="http://127.0.0.1:${PORT}" \
-  K6_RBAC_PERMISSIVE=true \
+  K6_USER=reference-dev \
     bash "${ROOT_DIR}/bin/run-test.sh" \
       --client="${CLIENT}" \
       --scenario="${SCENARIO}" \
