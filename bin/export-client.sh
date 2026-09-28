@@ -10,7 +10,7 @@
 #   Step 2: Copy client files + framework core
 #   Step 3: Rewrite imports (../../../src/ → ../framework/src/)
 #   Step 4: Generate config files (package.json, tsconfig, webpack, etc.)
-#   Step 5: Post-export validation (npm install + typecheck)
+#   Step 5: Post-export validation (pnpm install, which writes pnpm-lock.yaml, + typecheck)
 #
 # Usage: ./bin/export-client.sh --client <name> --output <path>
 # See --help for all options.
@@ -21,6 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CLIENTS_DIR="${ROOT_DIR}/clients"
 FRAMEWORK_VERSION="$(node -e "console.log(require('${ROOT_DIR}/package.json').version)" 2>/dev/null || echo "0.1.0")"
+# The exported repo uses the monorepo's package manager (pnpm, pinned via packageManager).
+PNPM_SPEC="$(node -e "console.log(require('${ROOT_DIR}/package.json').packageManager || '')" 2>/dev/null || true)"
+[[ "${PNPM_SPEC}" == pnpm@* ]] || PNPM_SPEC="pnpm@11.28.0"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CLIENT=""
@@ -89,7 +92,7 @@ ${BOLD}── Options ───────────────────�
   --new                Create a new client (scaffolding) and export as standalone
   --service <name>     Service name for --new scaffolding (default: api)
   --force              Overwrite output directory if it exists
-  --skip-validate      Skip post-export validation (npm install + typecheck)
+  --skip-validate      Skip post-export validation (pnpm install + typecheck; no lockfile is written)
   --git-init           Initialize git repo with initial commit
   --ci <provider>      Generate CI workflow: github, gitlab, or none (default: none)
   --dry-run            Show what would be exported without creating files
@@ -433,7 +436,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo ""
 
   echo -e "  ${BOLD}Files to generate:${RESET}"
-  for f in package.json tsconfig.json webpack.config.js .eslintrc.json .gitignore bin/run-test.sh bin/approve-run.sh export-manifest.json; do
+  for f in package.json pnpm-workspace.yaml tsconfig.json webpack.config.js .eslintrc.json .gitignore bin/run-test.sh bin/approve-run.sh bin/target-guard.js framework/bin/mock-server.js mock/routes.json export-manifest.json; do
     echo -e "    ${f}"
   done
   [[ "${CI_PROVIDER}" == "github" ]] && echo -e "    .github/workflows/k6.yml"
@@ -607,6 +610,23 @@ if [[ "${WITH_REPORTS}" == "true" ]]; then
   CAPABILITY_FILES=$((CAPABILITY_FILES + 3))
 fi
 
+# Mock server: local development and the CI run when no BASE_URL is configured.
+# mock/routes.json answers GET /api/<service> for each service in config/default.json,
+# the path the scaffolded smoke scenario calls; edit it or point BASE_URL at a real host.
+cp "${ROOT_DIR}/bin/mock-server.js" "${ROOT_DIR}/bin/_help.js" "${OUTPUT_DIR}/framework/bin/"
+mkdir -p "${OUTPUT_DIR}/mock"
+node -e '
+  const fs = require("fs");
+  const [cfgPath, dest] = process.argv.slice(1);
+  let services = [];
+  try { services = Object.keys(JSON.parse(fs.readFileSync(cfgPath, "utf8")).services || {}); } catch { /* no config */ }
+  const routes = services
+    .filter((s) => /^[A-Za-z0-9_-]+$/.test(s))
+    .map((s) => ({ method: "GET", path: `/api/${s}`, status: 200, body: { ok: true, service: s } }));
+  fs.writeFileSync(dest, JSON.stringify(routes, null, 2) + "\n");
+' "${OUTPUT_DIR}/config/default.json" "${OUTPUT_DIR}/mock/routes.json"
+CAPABILITY_FILES=$((CAPABILITY_FILES + 3))
+
 if [[ "${WITH_DISCOVERY}" == "true" ]]; then
   # Same relative layout as the monorepo: framework/bin/discovery/*.js resolve
   # ../../shared/schemas/discovery-flow.schema.json (copied with shared/schemas above).
@@ -760,13 +780,14 @@ cat > "${OUTPUT_DIR}/package.json" << PKGJSON
   "version": "1.0.0",
   "description": "k6 load tests for ${CLIENT} (exported from k6-enterprise-framework v${FRAMEWORK_VERSION})",
   "private": true,
+  "packageManager": "${PNPM_SPEC}",
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "build:watch": "webpack --config webpack.config.js --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'scenarios/**/*.ts' 'lib/**/*.ts'",
     "lint:fix": "eslint 'scenarios/**/*.ts' 'lib/**/*.ts' --fix",
-    "validate": "npm run typecheck && npm run lint",
+    "validate": "pnpm run typecheck && pnpm run lint",
     "validate:config": "node framework/bin/validate-config.js --file=config/default.json"
   },
   "devDependencies": {
@@ -789,6 +810,14 @@ cat > "${OUTPUT_DIR}/package.json" << PKGJSON
 }
 PKGJSON
 log_success "Generated package.json"
+
+# Anchors the repo as its own pnpm workspace root, so an install never attaches to a
+# pnpm-workspace.yaml in an ancestor directory.
+cat > "${OUTPUT_DIR}/pnpm-workspace.yaml" << 'PNPMWS'
+packages:
+  - .
+PNPMWS
+log_success "Generated pnpm-workspace.yaml"
 
 # ── T-306: tsconfig.json ─────────────────────────────────────────────────────
 cat > "${OUTPUT_DIR}/tsconfig.json" << 'TSCONFIG'
@@ -1205,6 +1234,19 @@ POLICY_FILE="$(rg_policy_file "${ROOT_DIR}")"
 rg_trusted_dirs "${POLICY_FILE}"
 rg_classify "$(rg_gate_kind "${SCENARIO_SRC}")" "${PROFILE}" "${ENV}" "${POLICY_FILE}"
 
+# ── Target guard: never fire load at a target the config does not allow ──────
+# Same check as the monorepo runner (bin/target-guard.js): credentials in a baseUrl,
+# hosts outside allowedHosts, non-smoke/quick load on a prod* env without
+# K6_ALLOW_PROD_LOAD=true. Not bypassable with --skip-validate.
+TG_CONFIG="${CONFIG_FILE}"
+[[ -f "${TG_CONFIG}" ]] || TG_CONFIG="${ROOT_DIR}/config/default.json"
+TG_ARGS=(--env="${ENV}" --profile="${PROFILE}")
+[[ -f "${TG_CONFIG}" ]] && TG_ARGS+=(--config="${TG_CONFIG}")
+if ! node "${SCRIPT_DIR}/target-guard.js" "${TG_ARGS[@]}"; then
+  log_error "Target guard refused this run. Fix the config or set K6_ALLOW_PROD_LOAD=true."
+  exit 107
+fi
+
 # ── Dry-run ───────────────────────────────────────────────────────────────────
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo -e "${BOLD}── Dry-run: execution plan ──${RESET}"
@@ -1453,12 +1495,14 @@ RUNTEST
 chmod +x "${OUTPUT_DIR}/bin/run-test.sh"
 log_success "Generated bin/run-test.sh (standalone)"
 
-# Run guard: trusted k6 resolution + human approval for guarded runs (exit 109).
-for f in _run-guard.sh _run-approval.js approve-run.sh; do
+# Run guard: trusted k6 resolution + human approval for guarded runs (exit 109),
+# and the target guard (allowedHosts, credentials in baseUrl, load on prod*).
+# RBAC and CLI auth are not exported: they need ts-node and src/core/rbac*, see README.
+for f in _run-guard.sh _run-approval.js approve-run.sh target-guard.js; do
   cp "${ROOT_DIR}/bin/${f}" "${OUTPUT_DIR}/bin/${f}"
 done
 chmod +x "${OUTPUT_DIR}/bin/approve-run.sh"
-log_success "Copied run guard (bin/_run-guard.sh, bin/_run-approval.js, bin/approve-run.sh)"
+log_success "Copied run guard (bin/_run-guard.sh, bin/_run-approval.js, bin/approve-run.sh, bin/target-guard.js)"
 
 # ── T-314: Copy update-framework.sh ──────────────────────────────────────────
 if [[ -f "${ROOT_DIR}/bin/update-framework.sh" ]]; then
@@ -1716,11 +1760,39 @@ log_success "Generated export-manifest.json"
 
 GENERATED_COUNT=7
 
+# ── Default CI scenario: one that exists in this export ──────────────────────
+# Prefer the scaffolder's smoke (scenarios/api/smoke-*.ts), then any api/ scenario,
+# then the first one. Paths are restricted to the runner's safe charset.
+DEFAULT_SCENARIO=""
+if [[ -d "${OUTPUT_DIR}/scenarios" ]]; then
+  _ALL_SCEN=$(find "${OUTPUT_DIR}/scenarios" -name "*.ts" -type f \
+    | sed "s|${OUTPUT_DIR}/scenarios/||; s|\.ts$||" | LC_ALL=C sort)
+  DEFAULT_SCENARIO=$(grep -E '^api/smoke-' <<< "${_ALL_SCEN}" | head -1 || true)
+  [[ -z "${DEFAULT_SCENARIO}" ]] && DEFAULT_SCENARIO=$(grep -E '^api/' <<< "${_ALL_SCEN}" | head -1 || true)
+  [[ -z "${DEFAULT_SCENARIO}" ]] && DEFAULT_SCENARIO=$(head -1 <<< "${_ALL_SCEN}")
+  unset _ALL_SCEN
+fi
+if [[ -n "${CI_PROVIDER}" && "${CI_PROVIDER}" != "none" ]]; then
+  if [[ -z "${DEFAULT_SCENARIO}" || ! "${DEFAULT_SCENARIO}" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
+    log_error "CI needs a default scenario: no scenarios/**/*.ts with a safe path in the export"
+    exit 1
+  fi
+  log_info "CI default scenario: ${BOLD}${DEFAULT_SCENARIO}${RESET}"
+fi
+
 # ── T-312: GitHub Actions workflow ───────────────────────────────────────────
+# Rules (test/bin/export-client-ci.test.ts): pnpm, never `npm ci` (no package-lock.json
+# is exported); workflow inputs reach the shell through env:, never ${{ }} inside run:;
+# typecheck fails the job; the profile menu lists only profiles the runner does not
+# guard (heavy ones exit 109 without a local human approval).
 if [[ "${CI_PROVIDER}" == "github" ]]; then
   mkdir -p "${OUTPUT_DIR}/.github/workflows"
   cat > "${OUTPUT_DIR}/.github/workflows/k6.yml" << 'GHACTIONS'
 name: k6 Load Tests
+
+# Without the BASE_URL repository variable the run targets the bundled mock server
+# (framework/bin/mock-server.js + mock/routes.json): the first push checks the
+# pipeline, not your API. Set vars.BASE_URL to a non-production host to test it.
 
 on:
   push:
@@ -1730,15 +1802,18 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Scenario path (e.g., api/health-check)'
+        description: 'Scenario path under scenarios/, without .ts'
         required: true
-        default: 'api/health-check'
+        default: '__DEFAULT_SCENARIO__'
       profile:
-        description: 'Load profile'
+        description: 'Load profile (heavy profiles need a human approval and do not run in CI)'
         required: true
         default: 'smoke'
         type: choice
-        options: [smoke, quick, load, rampup, capacity, stress, spike]
+        options: [smoke, quick, throughput-low, throughput-medium, load, rampup]
+
+permissions:
+  contents: read
 
 jobs:
   load-test:
@@ -1748,36 +1823,55 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Setup k6
+        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
+        with:
+          k6-version: "2.3.0"
+
+      - name: Put k6 in a trusted directory
+        # The runner never resolves k6 through PATH (bin/_run-guard.sh).
+        run: sudo install -m 0755 "$(command -v k6)" /usr/local/bin/k6
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-          cache: 'npm'
-
-      - name: Install k6
-        run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install -y k6
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::warning::No pnpm-lock.yaml in the repo: versions are resolved now. Commit the lockfile pnpm install writes."
+            pnpm install --no-frozen-lockfile
+          fi
 
       - name: Typecheck
-        run: npm run typecheck || true
+        run: pnpm run typecheck
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
+
+      - name: Start mock server
+        if: vars.BASE_URL == ''
+        run: |
+          node framework/bin/mock-server.js --port=8080 --routes=mock/routes.json --no-log &
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "::error::mock server did not answer on :8080"
+          exit 1
 
       - name: Run k6 test
-        run: |
-          SCENARIO="${{ github.event.inputs.scenario || 'api/health-check' }}"
-          PROFILE="${{ github.event.inputs.profile || 'smoke' }}"
-          ./bin/run-test.sh --scenario="${SCENARIO}" --profile="${PROFILE}" --skip-build
         env:
-          BASE_URL: ${{ vars.BASE_URL || 'https://httpbin.org' }}
+          # Inputs reach the shell as env vars, never interpolated into the script.
+          SCENARIO: ${{ inputs.scenario || '__DEFAULT_SCENARIO__' }}
+          PROFILE: ${{ inputs.profile || 'smoke' }}
+          BASE_URL: ${{ vars.BASE_URL || 'http://127.0.0.1:8080' }}
+        run: ./bin/run-test.sh --scenario="${SCENARIO}" --profile="${PROFILE}" --skip-build
 
       - name: Upload reports
         if: always()
@@ -1787,59 +1881,57 @@ jobs:
           path: reports/
           retention-days: 30
 GHACTIONS
+  sed -i.bak "s|__DEFAULT_SCENARIO__|${DEFAULT_SCENARIO}|g" "${OUTPUT_DIR}/.github/workflows/k6.yml"
+  rm -f "${OUTPUT_DIR}/.github/workflows/k6.yml.bak"
   log_success "Generated .github/workflows/k6.yml"
   GENERATED_COUNT=$((GENERATED_COUNT + 1))
 fi
 
 # ── T-313: GitLab CI pipeline ────────────────────────────────────────────────
+# Same rules as the GitHub workflow. SCENARIO/PROFILE/BASE_URL are CI variables the
+# shell reads; a pipeline run can override them.
 if [[ "${CI_PROVIDER}" == "gitlab" ]]; then
   cat > "${OUTPUT_DIR}/.gitlab-ci.yml" << 'GITLABCI'
 stages:
   - validate
-  - build
   - test
-  - report
 
+# Without a BASE_URL CI/CD variable the test job targets the bundled mock server
+# (framework/bin/mock-server.js + mock/routes.json). Keep PROFILE to smoke, quick,
+# throughput-low, throughput-medium, load or rampup: heavy profiles exit 109 in CI.
 variables:
-  SCENARIO: "api/health-check"
+  SCENARIO: "__DEFAULT_SCENARIO__"
   PROFILE: "smoke"
-  BASE_URL: "${BASE_URL}"
 
-.k6-image: &k6-image
+.node: &node
   image: node:24
   before_script:
-    - apt-get update && apt-get install -y gnupg2
-    - curl -s https://dl.k6.io/key.gpg | gpg --dearmor | tee /usr/share/keyrings/k6-archive-keyring.gpg
-    - echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | tee /etc/apt/sources.list.d/k6.list
-    - apt-get update && apt-get install -y k6
-    - npm ci
+    - corepack enable
+    - if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --no-frozen-lockfile; fi
 
 validate:
-  <<: *k6-image
+  <<: *node
   stage: validate
   script:
-    - npm run typecheck || true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-
-build:
-  <<: *k6-image
-  stage: build
-  script:
-    - npm run build
-  artifacts:
-    paths:
-      - dist/
-    expire_in: 1 hour
+    - pnpm run typecheck
+    - pnpm run build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 
 test:
-  <<: *k6-image
+  <<: *node
   stage: test
   script:
+    - curl -fsSL "https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz" | tar -xz -C /tmp
+    - install -m 0755 /tmp/k6-v2.3.0-linux-amd64/k6 /usr/local/bin/k6
+    - pnpm run build
+    - |
+      if [ -z "${BASE_URL:-}" ]; then
+        node framework/bin/mock-server.js --port=8080 --routes=mock/routes.json --no-log &
+        for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && break; sleep 1; done
+        export BASE_URL="http://127.0.0.1:8080"
+      fi
     - ./bin/run-test.sh --scenario="${SCENARIO}" --profile="${PROFILE}" --skip-build
   artifacts:
     paths:
@@ -1850,6 +1942,8 @@ test:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
 GITLABCI
+  sed -i.bak "s|__DEFAULT_SCENARIO__|${DEFAULT_SCENARIO}|g" "${OUTPUT_DIR}/.gitlab-ci.yml"
+  rm -f "${OUTPUT_DIR}/.gitlab-ci.yml.bak"
   log_success "Generated .gitlab-ci.yml"
   GENERATED_COUNT=$((GENERATED_COUNT + 1))
 fi
@@ -1895,11 +1989,11 @@ Standalone performance test repository exported from k6-enterprise-framework v${
 ## Quick Start
 
 \`\`\`bash
-# 1. Install dependencies
-npm install
+# 1. Install dependencies (pnpm, pinned in package.json "packageManager"; corepack enable)
+pnpm install
 
 # 2. Build test bundles
-npm run build
+pnpm run build
 
 # 3. Run a test
 ./bin/run-test.sh --scenario=<scenario> --profile=smoke
@@ -1982,6 +2076,31 @@ Environment-specific configs: \`config/staging.json\`, \`config/production.json\
 \`\`\`bash
 ./bin/run-test.sh --scenario=api/health-check --profile=load --env=staging
 \`\`\`
+
+---
+
+## Guards in this runner
+
+\`bin/run-test.sh\` is a smaller runner than the framework's. It keeps:
+
+- **Trusted k6**: k6 resolves from trusted directories only (\`bin/_run-guard.sh\`), never from \`PATH\`.
+- **Human approval** (exit 109): gated scenarios, heavy profiles, envs outside \`nonProdEnvs\` and \`K6_ALLOW_PROD_LOAD=true\` need a single-use approval a human creates with \`./bin/approve-run.sh\`. There are no gate unlock flags: every gated scenario is guarded.
+- **Target guard** (exit 107, \`bin/target-guard.js\`): refuses credentials in a \`baseUrl\`, hosts outside \`allowedHosts\` and non-smoke/quick load on a \`prod*\` env without \`K6_ALLOW_PROD_LOAD=true\`.
+
+It does **not** have:
+
+- **RBAC and CLI auth** (\`check-rbac.js\`, \`check-cli-auth.js\`, \`K6_AUTH_TOKEN\`): anyone who can run the script can run any profile the guards above allow. Restrict who can push and who can trigger the workflow, or keep this client in the monorepo.
+- **\`--gate-baseline\`** and the other monorepo-only flags.
+
+---
+
+## CI
+
+\`--ci=github\` writes \`.github/workflows/k6.yml\` (\`--ci=gitlab\`: \`.gitlab-ci.yml\`): pnpm install (frozen when \`pnpm-lock.yaml\` is committed), typecheck, build and a smoke run of \`${DEFAULT_SCENARIO:-<scenario>}\`.
+
+- Without a \`BASE_URL\` variable the run targets the bundled mock server (\`framework/bin/mock-server.js\`), which answers the routes in \`mock/routes.json\` plus its built-ins (\`/health\`, \`/api/users\`, \`/api/orders\`, \`/api/login\`). Set \`BASE_URL\` to a non-production host to test your API.
+- The manual run offers smoke, quick, throughput-low, throughput-medium, load and rampup. Heavy profiles exit 109 in CI: they need a human approval on the machine that runs them.
+- Commit \`pnpm-lock.yaml\`: the export writes it unless it ran with \`--skip-validate\`.
 
 READMEEOF
 
@@ -2286,9 +2405,11 @@ To update the vendorized framework core:
 # From a local directory
 ./bin/update-framework.sh --from=/path/to/k6-enterprise-framework
 
-# From a GitHub repository
-./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=v1.0.0
+# From a GitHub repository, pinned to a commit
+./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=<commit-sha>
 \`\`\`
+
+It refreshes \`framework/\` only. The runner and its guards in \`bin/\` (\`run-test.sh\`, \`_run-guard.sh\`, \`target-guard.js\`) stay as exported; re-export to pick up changes there.
 
 ---
 *Exported on $(date -u +"%Y-%m-%d") from k6-enterprise-framework v${FRAMEWORK_VERSION}*
@@ -2329,10 +2450,12 @@ else
   done
   log_success "Generated JSON files valid"
 
-  # npm install + typecheck
-  log_info "Running npm install..."
-  if (cd "${OUTPUT_DIR}" && npm install --loglevel=error 2>&1 | tail -3); then
-    log_success "npm install complete"
+  # pnpm install (writes pnpm-lock.yaml, committed by --git-init) + typecheck
+  log_info "Running pnpm install..."
+  if ! command -v pnpm &>/dev/null; then
+    log_warn "pnpm not found: run 'corepack enable && pnpm install' in ${OUTPUT_DIR} and commit pnpm-lock.yaml"
+  elif (cd "${OUTPUT_DIR}" && pnpm install --reporter=silent 2>&1 | tail -3 && test -f pnpm-lock.yaml); then
+    log_success "pnpm install complete (pnpm-lock.yaml written)"
 
     log_info "Running typecheck..."
     if (cd "${OUTPUT_DIR}" && npx tsc --noEmit 2>&1); then
@@ -2341,7 +2464,7 @@ else
       log_warn "Typecheck had errors (the export is complete, review errors above)"
     fi
   else
-    log_warn "npm install had issues (the export is complete, review errors above)"
+    log_warn "pnpm install had issues (the export is complete, review errors above)"
   fi
 fi
 
@@ -2412,8 +2535,8 @@ echo ""
 echo -e "  ${BOLD}Next steps:${RESET}"
 echo -e "    cd ${OUTPUT_DIR}"
 if [[ "${SKIP_VALIDATE}" == "true" ]]; then
-  echo -e "    npm install"
+  echo -e "    pnpm install        # writes pnpm-lock.yaml: commit it"
 fi
-echo -e "    npm run build"
-echo -e "    ./bin/run-test.sh --scenario=api/<your-scenario> --profile=smoke"
+echo -e "    pnpm run build"
+echo -e "    ./bin/run-test.sh --scenario=${DEFAULT_SCENARIO:-api/<your-scenario>} --profile=smoke"
 echo ""
