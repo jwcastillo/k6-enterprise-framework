@@ -13,7 +13,7 @@
  *   - P95 < 3000ms
  *
  * Run:
- *   ./bin/run-test.sh --client=examples --scenario=integration/12-websocket --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=12-websocket --profile=smoke
  *
  * Troubleshooting:
  *   - If connection fails: echo.websocket.org may be down — use --env=local

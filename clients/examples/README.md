@@ -36,15 +36,17 @@ Ordered by complexity. Start with **Basic** scenarios to verify your environment
 | 06 | `api/06-weighted-execution.ts` | constant-vus | HTTP | Intermediate | Weighted scenario distribution | `--scenario=api/06-weighted-execution` |
 | 07 | `api/07-structured-logging.ts` | constant-vus | HTTP | Intermediate | Structured JSON logs, ELK | `--scenario=api/07-structured-logging` |
 | 08 | `api/08-rate-limiting.ts` | constant-vus | HTTP | Intermediate | 429 handling, throttle detection | `--scenario=api/08-rate-limiting` |
-| 09 | `mixed/09-ecommerce-flow.ts` | ramping-vus | HTTP | Advanced | Multi-step user journey | `--scenario=mixed/09-ecommerce-flow` |
+| 09 | `mixed/09-ecommerce-flow.ts` | ramping-vus | HTTP | Advanced | Multi-step user journey | `--scenario=09-ecommerce-flow` |
 | 10 | `api/10-graphql.ts` | constant-vus | GraphQL | Advanced | Query + mutation, variables | `--scenario=api/10-graphql` |
 | 11 | `api/11-file-upload.ts` | constant-vus | HTTP | Advanced | Multipart/form-data upload | `--scenario=api/11-file-upload` |
-| 12 | `integration/12-websocket.ts` | constant-vus | WebSocket | Advanced | Connect, send, receive, close | `--scenario=integration/12-websocket` |
-| 13 | `mixed/13-multi-protocol.ts` | ramping-vus | HTTP+WS | Advanced | Mixed protocol workload | `--scenario=mixed/13-multi-protocol` |
+| 12 | `integration/12-websocket.ts` | constant-vus | WebSocket | Advanced | Connect, send, receive, close | `--scenario=12-websocket` |
+| 13 | `mixed/13-multi-protocol.ts` | ramping-vus | HTTP+WS | Advanced | Mixed protocol workload | `--scenario=13-multi-protocol` |
 | 14 | `api/14-advanced-headers.ts` | constant-vus | HTTP | Intermediate | Custom headers, tracing | `--scenario=api/14-advanced-headers` |
-| 15 | `integration/15-smoke-baseline.ts` | constant-vus | HTTP | Basic | Smoke baseline (CI gate) | `--scenario=integration/15-smoke-baseline` |
-| 16 | `integration/16-sli-monitoring.ts` | ramping-vus | HTTP | Advanced | SLI tracking, SLO thresholds, error budget | `--scenario=integration/16-sli-monitoring` |
-| 99 | `mixed/99-full-dashboard-demo.ts` | constant-vus | HTTP+Browser | Advanced | Groups, Custom Metrics, Web Vitals, SLA thresholds | `--scenario=mixed/99-full-dashboard-demo` |
+| 15 | `integration/15-smoke-baseline.ts` | constant-vus | HTTP | Basic | Smoke baseline (CI gate) | `--scenario=15-smoke-baseline` |
+| 16 | `integration/16-sli-monitoring.ts` | ramping-vus | HTTP | Advanced | SLI tracking, SLO thresholds, error budget | `--scenario=16-sli-monitoring` |
+| 99 | `mixed/99-full-dashboard-demo.ts` | constant-vus | HTTP+Browser | Advanced | Groups, Custom Metrics, Web Vitals, SLA thresholds | `--scenario=99-full-dashboard-demo` |
+
+> **Note:** `integration/` and `mixed/` are legacy folders, not canonical buckets (`api`, `flow`, `domain`, `chaos`, `perf`). `bin/run-test.sh` rejects `--scenario=integration/...` or `--scenario=mixed/...` with "invalid bucket", so run those scenarios by bare name (`--scenario=15-smoke-baseline`); the runner resolves the file under `scenarios/`.
 
 ---
 
@@ -57,7 +59,7 @@ Start here. These scenarios run in under 1 minute and validate your setup.
 ```bash
 ./bin/run-test.sh --client=examples --scenario=api/01-auth-bearer --profile=smoke
 ./bin/run-test.sh --client=examples --scenario=api/02-contract-validation --profile=smoke
-./bin/run-test.sh --client=examples --scenario=integration/15-smoke-baseline --profile=smoke
+./bin/run-test.sh --client=examples --scenario=15-smoke-baseline --profile=smoke
 ```
 
 ### Intermediate (4–8, 14): Common HTTP patterns
@@ -74,8 +76,8 @@ Retry logic, correlation, rate limiting, and logging patterns used in real servi
 Full user journeys, GraphQL, WebSockets, and multi-protocol workloads.
 
 ```bash
-./bin/run-test.sh --client=examples --scenario=mixed/09-ecommerce-flow --profile=load
-./bin/run-test.sh --client=examples --scenario=integration/12-websocket --profile=quick
+./bin/run-test.sh --client=examples --scenario=09-ecommerce-flow --profile=load
+./bin/run-test.sh --client=examples --scenario=12-websocket --profile=quick
 ```
 
 ---
@@ -130,7 +132,7 @@ Scenarios 09 and 16 include full observability instrumentation (tracing, logging
 docker compose --profile observability up -d
 
 # 2. Run with full observability
-./bin/run-test.sh --client=examples --scenario=integration/16-sli-monitoring \
+./bin/run-test.sh --client=examples --scenario=16-sli-monitoring \
   --profile=smoke --observability
 
 # 3. View data in Grafana (http://localhost:3000):

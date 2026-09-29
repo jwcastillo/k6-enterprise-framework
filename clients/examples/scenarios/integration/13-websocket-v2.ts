@@ -13,7 +13,7 @@
  *   - P95 < 3000ms
  *
  * Run:
- *   ./bin/run-test.sh --client=examples --scenario=integration/13-websocket-v2 --profile=smoke
+ *   ./bin/run-test.sh --client=examples --scenario=13-websocket-v2 --profile=smoke
  *
  * Key differences from 12-websocket (legacy k6/ws):
  *   - Uses `new WebSocket(url)` constructor (standard browser-like API)

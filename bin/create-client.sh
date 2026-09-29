@@ -5,9 +5,9 @@
 # Identical output to `node bin/generate.js` → Client, without prompts.
 #
 # Usage:
+#   bin/create-client.sh --client=<client-name>
 #   bin/create-client.sh <client-name>
-#   bin/create-client.sh my-team
-#   bin/create-client.sh acme-corp --service=orders
+#   bin/create-client.sh --client=acme-corp --service=orders
 
 set -euo pipefail
 
@@ -35,46 +35,60 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 k6 Enterprise Framework — Client Scaffolder
 
 USAGE:
+  bin/create-client.sh --client=<name> [OPTIONS]
   bin/create-client.sh <name> [OPTIONS]
 
 ARGUMENTS:
-  <name>            Client name (letters, numbers, hyphens, underscores only)
+  --client=<name>   Client name (letters, numbers, hyphens, underscores only).
+  <name>            Same, as a positional argument.
 
 OPTIONS:
   --service=<name>  Default service name (default: api)
   --desc=<text>     Description for README and config
 
 EXAMPLES:
-  bin/create-client.sh my-team
+  bin/create-client.sh --client=my-team
   bin/create-client.sh acme-corp --service=payments --desc="Acme Corp load tests"
 
 NOTES:
   - Completes in < 5 seconds
   - Generated config passes framework validation
   - Example scenario is immediately runnable after npm run build
+  - Creates only the canonical scenario buckets accepted by bin/run-test.sh:
+    api, flow, domain, chaos, perf
 
 EOF
   exit 0
 fi
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
-CLIENT_NAME="${1:-}"
+# Accepts the documented form (--client=<name>) and the positional form.
+CLIENT_NAME=""
 SERVICE_NAME="api"
 DESCRIPTION=""
 
-shift 2>/dev/null || true
+set_client_name() {
+  if [[ -n "$CLIENT_NAME" && "$CLIENT_NAME" != "$1" ]]; then
+    log_error "Client name given twice: '${CLIENT_NAME}' and '$1'"
+    exit 1
+  fi
+  CLIENT_NAME="$1"
+}
+
 for arg in "$@"; do
   case "$arg" in
+    --client=*)  set_client_name "${arg#*=}" ;;
     --service=*) SERVICE_NAME="${arg#*=}" ;;
     --desc=*)    DESCRIPTION="${arg#*=}" ;;
-    *) log_error "Unknown argument: $arg"; exit 1 ;;
+    -*) log_error "Unknown argument: $arg"; exit 1 ;;
+    *)  set_client_name "$arg" ;;
   esac
 done
 
 # ── Validation ────────────────────────────────────────────────────────────────
 if [[ -z "$CLIENT_NAME" ]]; then
   log_error "Client name is required."
-  echo "Usage: bin/create-client.sh <name> [--service=<name>]"
+  echo "Usage: bin/create-client.sh --client=<name> [--service=<name>]"
   exit 1
 fi
 
@@ -95,9 +109,14 @@ fi
 
 [[ -z "$DESCRIPTION" ]] && DESCRIPTION="${CLIENT_NAME} load tests"
 
-# PascalCase helper
+# PascalCase helper: orders -> Orders, order-items -> OrderItems.
+# Portable awk (no GNU sed \U: BSD sed on macOS printed "Uorders").
 pascal_case() {
-  echo "$1" | sed -E 's/(^|[-_])([a-z])/\U\2/g'
+  printf '%s\n' "$1" | awk -F'[-_]' '{
+    out = ""
+    for (i = 1; i <= NF; i++) out = out toupper(substr($i, 1, 1)) substr($i, 2)
+    print out
+  }'
 }
 SERVICE_CLASS=$(pascal_case "$SERVICE_NAME")
 
@@ -110,8 +129,10 @@ mkdir -p \
   "${CLIENT_DIR}/lib/services" \
   "${CLIENT_DIR}/lib/factories" \
   "${CLIENT_DIR}/scenarios/api" \
-  "${CLIENT_DIR}/scenarios/integration" \
-  "${CLIENT_DIR}/scenarios/mixed"
+  "${CLIENT_DIR}/scenarios/flow" \
+  "${CLIENT_DIR}/scenarios/domain" \
+  "${CLIENT_DIR}/scenarios/chaos" \
+  "${CLIENT_DIR}/scenarios/perf"
 
 # ── config/default.json ───────────────────────────────────────────────────────
 cat > "${CLIENT_DIR}/config/default.json" << EOF
@@ -256,7 +277,8 @@ clients/${CLIENT_NAME}/
   data/            # test data pools (CSV/JSON)
   lib/services/    # service object classes
   lib/factories/   # data factory classes
-  scenarios/       # k6 test scripts
+  scenarios/       # k6 test scripts, one folder per canonical bucket:
+                   #   api/ flow/ domain/ chaos/ perf/
 \`\`\`
 EOF
 
