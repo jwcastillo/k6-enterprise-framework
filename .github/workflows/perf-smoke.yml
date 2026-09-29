@@ -7,12 +7,15 @@
 #     -H "Authorization: token $GITHUB_PAT" \
 #     -H "Accept: application/vnd.github.v3+json" \
 #     https://api.github.com/repos/<owner>/<repo>/actions/workflows/perf-smoke.yml/dispatches \
-#     -d '{"ref":"main","inputs":{"client":"_reference","env":"staging","profile":"smoke"}}'
+#     -d '{"ref":"main","inputs":{"client":"_reference","env":"staging","scenario":"domain/orders-lifecycle","profile":"smoke"}}'
 #
-# Secrets required (set in repo Settings → Secrets and variables → Actions):
-#   PERF_SLACK_WEBHOOK    — Slack incoming webhook URL (optional)
-#   PERF_EMAIL_TO         — Email notification recipient (optional)
-#   PERF_NOTIFY_WEBHOOK   — Generic webhook URL (optional)
+# Solo ofrece lo que CI puede correr. bin/run-test.sh pide una aprobación humana
+# (exit 109) para los perfiles pesados (stress, spike, breakpoint, soak, capacity) y
+# para los entornos fuera de nonProdEnvs (production); en CI no hay quien la firme.
+# Esas corridas se lanzan desde una terminal con bin/approve-run.sh.
+#
+# Secrets (repo Settings → Secrets and variables → Actions):
+#   PERF_SLACK_WEBHOOK    — Slack incoming webhook URL (optional, notify=slack)
 
 name: Performance Smoke Test
 
@@ -24,39 +27,34 @@ on:
         required: true
         default: "_reference"
       env:
-        description: "Target environment"
+        description: "Target environment (must be in the client's nonProdEnvs)"
         required: true
         default: "staging"
         type: choice
         options:
-          - local
+          - default
           - staging
-          - production
-      test:
-        description: "Test file path (relative to client scenarios/)"
-        required: false
-        default: ""
+      scenario:
+        description: "Scenario (<bucket>/<path> under clients/<client>/scenarios/)"
+        required: true
+        default: "domain/orders-lifecycle"
       profile:
-        description: "Load profile"
+        description: "Load profile (heavy profiles need a human approval and cannot run in CI)"
         required: true
         default: "smoke"
         type: choice
         options:
           - smoke
+          - quick
           - load
-          - stress
-          - soak
-          - breakpoint
       notify:
-        description: "Notification channels"
+        description: "Notification channel"
         required: false
         default: "none"
         type: choice
         options:
           - none
           - slack
-          - email
-          - slack,email
 
 # Prevent concurrent smoke runs for the same client
 concurrency:
@@ -96,58 +94,65 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Validate client config
-        env:
-          # Inputs por env, nunca interpolados en el script (inyección de shell).
-          IN_CLIENT: ${{ github.event.inputs.client }}
-          IN_ENV: ${{ github.event.inputs.env }}
-        run: |
-          node bin/validate-config.js \
-            --client="${IN_CLIENT}" \
-            --env="${IN_ENV}"
-
+      # Sin paso aparte de validate-config: bin/run-test.sh valida la config en su
+      # Step 1, y validate-config.js --client busca clients/<c>/config.json, que
+      # _reference no tiene (usa config/<env>.json): el paso tumbaba el job.
       - name: Run smoke test
         id: run-test
         env:
-          NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
-          NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
-          NOTIFY_WEBHOOK_URL: ${{ secrets.PERF_NOTIFY_WEBHOOK }}
+          # El runner falla cerrado si el cliente no trae rbac.json. En CI no hay
+          # usuario al que autorizar; el bypass queda registrado en el audit log.
+          K6_RBAC_PERMISSIVE: "true"
           IN_CLIENT: ${{ github.event.inputs.client }}
           IN_ENV: ${{ github.event.inputs.env }}
+          IN_SCENARIO: ${{ github.event.inputs.scenario }}
           IN_PROFILE: ${{ github.event.inputs.profile }}
-          IN_NOTIFY: ${{ github.event.inputs.notify }}
-          IN_TEST: ${{ github.event.inputs.test }}
+          RUN_DIR: reports/smoke-${{ github.run_id }}
         run: |
-          ARGS=(
-            "--client=${IN_CLIENT}"
-            "--env=${IN_ENV}"
-            "--profile=${IN_PROFILE}"
-            "--notify=${IN_NOTIFY}"
-            "--out=json=reports/smoke-${IN_CLIENT}-${{ github.run_id }}.json"
-          )
-          if [[ -n "${IN_TEST}" ]]; then
-            ARGS+=("--test=${IN_TEST}")
-          fi
-          bash bin/run-test.sh "${ARGS[@]}"
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          # El runner rechaza un --reports-dir cuyo padre no existe, y reports/ no
+          # esta en git: en un checkout limpio hay que crearlo.
+          mkdir -p "${RUN_DIR}"
+          set +e
+          bash bin/run-test.sh \
+            --client="${IN_CLIENT}" \
+            --env="${IN_ENV}" \
+            --scenario="${IN_SCENARIO}" \
+            --profile="${IN_PROFILE}" \
+            --reports-dir="${RUN_DIR}"
+          EXIT_CODE=$?
+          set -e
 
-      - name: Generate HTML report
-        if: always()
+          # El runner nombra los artefactos con un timestamp
+          # (<reports-dir>/<client>/<scenario>/summary-<ISO>.json): se buscan.
+          SUMMARY="$(find "${RUN_DIR}" -name 'summary-*.json' 2>/dev/null | sort | tail -1 || true)"
+
+          echo "exit_code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+          echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+          exit "${EXIT_CODE}"
+
+      - name: Notify Slack
+        if: always() && github.event.inputs.notify == 'slack' && steps.run-test.outputs.summary != ''
         env:
+          NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+          SUMMARY: ${{ steps.run-test.outputs.summary }}
           IN_CLIENT: ${{ github.event.inputs.client }}
+          IN_SCENARIO: ${{ github.event.inputs.scenario }}
         run: |
-          node bin/generate-report.js \
-            --input "reports/smoke-${IN_CLIENT}-${{ github.run_id }}.json" \
-            --output "reports/smoke-${IN_CLIENT}-${{ github.run_id }}.html" \
-            --type smoke || true
+          if [[ -z "${NOTIFY_SLACK_WEBHOOK}" ]]; then
+            echo "::warning::notify=slack but the PERF_SLACK_WEBHOOK secret is not set"
+            exit 0
+          fi
+          node bin/notify.js --result="${SUMMARY}" --webhook="${NOTIFY_SLACK_WEBHOOK}" \
+            --title="Smoke ${IN_CLIENT}/${IN_SCENARIO}" || echo "::warning::Slack notification failed"
 
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: perf-smoke-report-${{ github.run_id }}
-          path: reports/smoke-${{ github.event.inputs.client }}-${{ github.run_id }}.*
+          path: reports/smoke-${{ github.run_id }}/
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Post result summary
         if: always()
@@ -157,9 +162,11 @@ jobs:
           IN_CLIENT: ${{ github.event.inputs.client }}
           IN_ENV: ${{ github.event.inputs.env }}
           IN_PROFILE: ${{ github.event.inputs.profile }}
+          IN_SCENARIO: ${{ github.event.inputs.scenario }}
+          EXIT_CODE: ${{ steps.run-test.outputs.exit_code }}
         with:
           script: |
-            const exitCode = '${{ steps.run-test.outputs.exit_code }}';
+            const exitCode = process.env.EXIT_CODE;
             const status = exitCode === '0' ? '✅ PASS' : '❌ FAIL';
             const summary = `## Performance Smoke Test — ${status}
 
@@ -167,6 +174,7 @@ jobs:
             |---|---|
             | Client       | \`${process.env.IN_CLIENT}\` |
             | Environment  | \`${process.env.IN_ENV}\` |
+            | Scenario     | \`${process.env.IN_SCENARIO}\` |
             | Profile      | \`${process.env.IN_PROFILE}\` |
             | Exit code    | \`${exitCode}\` |
             | Run ID       | [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
