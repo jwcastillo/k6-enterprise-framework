@@ -98,10 +98,15 @@ jobs:
           # El runner falla cerrado si el cliente no trae rbac.json. En CI no hay
           # usuario al que autorizar; el bypass queda registrado en el audit log.
           K6_RBAC_PERMISSIVE: "true"
+          # Los inputs pasan por env y no se interpolan en el script: un input con
+          # comillas o $(...) no puede inyectar comandos en el runner.
+          IN_CLIENT: ${{ github.event.inputs.client || '_reference' }}
+          IN_ENV: ${{ github.event.inputs.env || 'staging' }}
+          IN_SCENARIO: ${{ github.event.inputs.scenario || 'domain/orders-lifecycle' }}
         run: |
-          CLIENT="${{ github.event.inputs.client || '_reference' }}"
-          ENV="${{ github.event.inputs.env || 'staging' }}"
-          SCENARIO="${{ github.event.inputs.scenario || 'domain/orders-lifecycle' }}"
+          CLIENT="${IN_CLIENT}"
+          ENV="${IN_ENV}"
+          SCENARIO="${IN_SCENARIO}"
           GATE_DIR="reports/gate-${{ github.run_id }}"
 
           set +e

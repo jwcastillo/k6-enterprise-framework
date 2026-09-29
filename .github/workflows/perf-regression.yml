@@ -119,11 +119,16 @@ jobs:
         env:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
           NOTIFY_EMAIL_TO: ${{ secrets.PERF_EMAIL_TO }}
+          # Inputs por env, nunca interpolados en el script (inyección de shell).
+          IN_CLIENT: ${{ github.event.inputs.client || '_reference' }}
+          IN_SUITE: ${{ github.event.inputs.suite || 'nightly' }}
+          IN_ENV: ${{ github.event.inputs.env || 'staging' }}
+          IN_NOTIFY: ${{ github.event.inputs.notify || 'slack' }}
         run: |
-          CLIENT="${{ github.event.inputs.client || '_reference' }}"
-          SUITE="${{ github.event.inputs.suite || 'nightly' }}"
-          ENV="${{ github.event.inputs.env || 'staging' }}"
-          NOTIFY="${{ github.event.inputs.notify || 'slack' }}"
+          CLIENT="${IN_CLIENT}"
+          SUITE="${IN_SUITE}"
+          ENV="${IN_ENV}"
+          NOTIFY="${IN_NOTIFY}"
 
           set +e
           bash bin/run-regression.sh \

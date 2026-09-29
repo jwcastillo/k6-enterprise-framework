@@ -132,10 +132,14 @@ jobs:
         id: gate
         env:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
+          # Inputs por env, nunca interpolados en el script (inyección de shell).
+          IN_CLIENT: ${{ github.event.inputs.client || inputs.client || '_reference' }}
+          IN_ENV: ${{ github.event.inputs.env || inputs.env || 'staging' }}
+          IN_BASELINE: ${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}
         run: |
-          CLIENT="${{ github.event.inputs.client || inputs.client || '_reference' }}"
-          ENV="${{ github.event.inputs.env || inputs.env || 'staging' }}"
-          BASELINE="${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}"
+          CLIENT="${IN_CLIENT}"
+          ENV="${IN_ENV}"
+          BASELINE="${IN_BASELINE}"
           CURRENT_REPORT="reports/baseline-current-${{ github.run_id }}.json"
 
           # Warn early if the baseline file is missing so the user knows why the gate was skipped
@@ -185,10 +189,12 @@ jobs:
       # Any other non-zero = unexpected error in run-test.sh
       - name: "Fail on regression or error"
         if: always()
+        env:
+          IN_BASELINE: ${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}
         run: |
           EXIT_CODE="${{ steps.gate.outputs.exit_code }}"
           GATE_STATUS="${{ steps.gate.outputs.gate_status }}"
-          BASELINE="${{ github.event.inputs.baseline || inputs.baseline || 'reports/baseline.json' }}"
+          BASELINE="${IN_BASELINE}"
 
           case "${EXIT_CODE}" in
             0)
