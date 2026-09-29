@@ -169,6 +169,32 @@ describe("run-test.sh — human approval for guarded runs", () => {
     expect(runner(["--profile=smoke"], { K6_ALLOW_PROD_LOAD: "true" }).status).toBe(109);
   });
 
+  it("treats a productionHosts host in the bundle or an env var as guarded, whatever --env says", () => {
+    const cfgPath = path.join(clientDir, "config", "default.json");
+    const bundle = path.join(ROOT, "dist", clientName.replace(/^_/, ""), "api", "approval-probe.js");
+    const cfg = fs.readFileSync(cfgPath, "utf8");
+    const js = fs.readFileSync(bundle, "utf8");
+    try {
+      fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfg), productionHosts: ["prod.example.com"] }));
+      const clean = runner(["--profile=smoke"]);
+      expect(clean.status, out(clean)).toBe(0);
+      const viaEnv = runner(["--profile=smoke"], { WEB_BASE_URL: "https://PROD.example.com/x" });
+      expect(viaEnv.status, out(viaEnv)).toBe(109);
+      expect(out(viaEnv)).toContain("production host targeted: prod.example.com ($WEB_BASE_URL)");
+      fs.writeFileSync(bundle, `const u = "https://prod.example.com";\n${js}`);
+      const viaBundle = runner(["--profile=smoke"]);
+      expect(viaBundle.status, out(viaBundle)).toBe(109);
+      expect(out(viaBundle)).toContain("prod.example.com (bundle)");
+      approve({ profile: "smoke" });
+      const approved = runner(["--profile=smoke"]);
+      expect(approved.status, out(approved)).toBe(0);
+    } finally {
+      fs.writeFileSync(cfgPath, cfg);
+      fs.writeFileSync(bundle, js);
+      fs.rmSync(path.join(reportsDir, clientName), { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("runs once with a valid approval, records it, and refuses the second run", () => {
     const { rec } = approve();
     const first = runner(["--profile=stress"]);

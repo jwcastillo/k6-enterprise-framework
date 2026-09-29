@@ -20,6 +20,7 @@ A run is **guarded** when any of these holds:
 | `K6_ALLOW_PROD_LOAD=true` | — |
 | `--env` is not in `nonProdEnvs` (case-insensitive) | `default local dev development test testing qa ci sandbox staging stage uat` |
 | `--profile` is in `heavyProfiles` | `stress spike breakpoint soak capacity throughput-high throughput-ramp` |
+| A host in `productionHosts` (case-insensitive) appears in the built scenario or in an environment variable's value, whatever `--env` says. Checked after the build, right before k6 starts; a host in a comment counts too. | — (no check) |
 
 Smoke, quick and load on a non-production environment stay frictionless: no approval.
 
@@ -31,6 +32,7 @@ replaces its default:
 {
   "nonProdEnvs": ["default", "dev", "staging", "perf-lab"],
   "heavyProfiles": ["stress", "spike", "breakpoint", "soak", "capacity"],
+  "productionHosts": ["api.example.com", "www.example.com"],
   "trustedBinDirs": ["~/.local/bin"]
 }
 ```
