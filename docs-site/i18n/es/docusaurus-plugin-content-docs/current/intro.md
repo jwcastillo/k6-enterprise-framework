@@ -16,7 +16,9 @@ Plataforma unificada y self-service de pruebas de carga empresarial construida s
 # 1. Instalar dependencias
 npm install
 
-# 2. Ejecutar el test smoke de referencia
+# 2. Ejecutar el test smoke de referencia (reference-dev es el usuario con rol
+#    developer de clients/_reference/config/rbac.json; sin él, el RBAC falla cerrado)
+export K6_USER=reference-dev
 ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
 # 3. Ver el reporte HTML interactivo

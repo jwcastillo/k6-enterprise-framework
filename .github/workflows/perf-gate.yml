@@ -110,6 +110,8 @@ jobs:
           NOTIFY_SLACK_WEBHOOK: ${{ secrets.PERF_SLACK_WEBHOOK }}
           # El runner falla cerrado si el cliente no trae rbac.json. En CI no hay
           # usuario al que autorizar; el bypass queda registrado en el audit log.
+          # Se mantiene para clientes elegidos por input que aun no traen rbac.json.
+          # Con rbac.json (como _reference) el bypass no aplica: ahi se usa K6_USER.
           K6_RBAC_PERMISSIVE: "true"
           # Los inputs pasan por env y no se interpolan en el script: un input con
           # comillas o $(...) no puede inyectar comandos en el runner.
@@ -118,6 +120,8 @@ jobs:
           IN_SCENARIO: ${{ github.event.inputs.scenario || 'domain/orders-lifecycle' }}
         run: |
           CLIENT="${IN_CLIENT}"
+          # Usuario developer del rbac.json de referencia (el perfil de este gate es smoke)
+          if [ "${CLIENT}" = "_reference" ]; then export K6_USER=reference-dev; fi
           ENV="${IN_ENV}"
           SCENARIO="${IN_SCENARIO}"
           GATE_DIR="reports/gate-${{ github.run_id }}"

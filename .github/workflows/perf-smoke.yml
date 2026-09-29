@@ -112,6 +112,8 @@ jobs:
           # El runner rechaza un --reports-dir cuyo padre no existe, y reports/ no
           # esta en git: en un checkout limpio hay que crearlo.
           mkdir -p "${RUN_DIR}"
+          # Usuario developer del rbac.json de referencia: con rbac.json el bypass no aplica.
+          if [ "${IN_CLIENT}" = "_reference" ]; then export K6_USER=reference-dev; fi
           set +e
           bash bin/run-test.sh \
             --client="${IN_CLIENT}" \

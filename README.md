@@ -36,7 +36,9 @@ Writing one-off k6 scripts is easy. Running **repeatable, reviewable, observable
 pnpm install
 
 # 2. Run the reference smoke test
-./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
+#    RBAC fails closed; _reference ships config/rbac.json with one
+#    developer-role identity for the quick start (see clients/_reference/README.md#rbac)
+K6_USER=reference-dev ./bin/run-test.sh --client=_reference --scenario=api/smoke-users --profile=smoke
 
 # 3. Open the self-contained HTML report
 open reports/_reference/api_smoke-users/html-report-*.html

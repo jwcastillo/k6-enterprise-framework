@@ -130,6 +130,50 @@ describe("bin/check-rbac.js (SEC-01)", () => {
   });
 });
 
+// ── clients/_reference/config/rbac.json (quick start) ────────────────────────
+// El quick start del README corre _reference con K6_USER=reference-dev. Sin este
+// archivo el RBAC falla cerrado y el quick start termina en exit 1.
+
+describe("clients/_reference/config/rbac.json (quick start)", () => {
+  const REF_RBAC = path.join(ROOT, "clients/_reference/config/rbac.json");
+
+  function checkRef(profile: string, extraEnv: NodeJS.ProcessEnv) {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env["K6_RBAC_PERMISSIVE"];
+    delete env["K6_USER"];
+    return spawnSync(
+      "node",
+      [CHECK_RBAC, "--client=_reference", `--profile=${profile}`, `--root=${ROOT}`],
+      { encoding: "utf-8", env: { ...env, ...extraEnv } }
+    );
+  }
+
+  it("existe y solo declara usuarios con rol developer", () => {
+    expect(fs.existsSync(REF_RBAC), "falta clients/_reference/config/rbac.json").toBe(true);
+    const cfg = JSON.parse(fs.readFileSync(REF_RBAC, "utf-8")) as {
+      users: { id: string; role: string }[];
+    };
+    expect(cfg.users.map((u) => u.id)).toContain("reference-dev");
+    for (const u of cfg.users) expect(u.role).toBe("developer");
+  });
+
+  it("permite smoke a reference-dev via K6_USER, sin K6_RBAC_PERMISSIVE", () => {
+    const res = checkRef("smoke", { K6_USER: "reference-dev" });
+    expect(res.status, `${res.stdout}\n${res.stderr}`).toBe(0);
+  });
+
+  it("niega stress a reference-dev (rol developer)", () => {
+    const res = checkRef("stress", { K6_USER: "reference-dev" });
+    expect(res.status).toBe(1);
+  });
+
+  it("niega a un usuario no listado aunque K6_RBAC_PERMISSIVE=true", () => {
+    const res = checkRef("smoke", { K6_USER: "someone-else", K6_RBAC_PERMISSIVE: "true" });
+    expect(res.status).toBe(1);
+    expect(`${res.stdout}${res.stderr}`).toMatch(/not registered/);
+  });
+});
+
 // ── bin/check-cli-auth.js (SEC-02) ───────────────────────────────────────────
 
 describe("bin/check-cli-auth.js (SEC-02)", () => {

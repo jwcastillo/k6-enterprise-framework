@@ -160,6 +160,8 @@ jobs:
           RUN_DIR: reports/baseline-gate-${{ github.run_id }}
         run: |
           CLIENT="${IN_CLIENT}"
+          # Usuario developer del rbac.json de referencia: con rbac.json el bypass no aplica.
+          if [ "${IN_CLIENT}" = "_reference" ]; then export K6_USER=reference-dev; fi
           ENV="${IN_ENV}"
           SCENARIO="${IN_SCENARIO}"
           BASELINE="${IN_BASELINE}"
