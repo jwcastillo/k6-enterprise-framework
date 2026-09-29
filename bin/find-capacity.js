@@ -151,8 +151,11 @@ function newestSummary(artifactsDir, exclude) {
   return found.length > 0 ? path.join(artifactsDir, found[found.length - 1]) : null;
 }
 
-/** Build the step runner: one run-test.sh execution per rate. */
-function createRunStep(opts, artifactsDir) {
+/**
+ * Build the step runner: one run-test.sh execution per rate.
+ * `spawnFn` is injectable so the tests can check what each step is launched with.
+ */
+function createRunStep(opts, artifactsDir, spawnFn = spawn) {
   let built = false;
 
   return (rps) =>
@@ -171,12 +174,17 @@ function createRunStep(opts, artifactsDir) {
       if (built) args.push("--skip-build");
 
       console.log(`[capacity] Running ${rps} rps for ${opts.stepDuration}s...`);
-      const child = spawn("bash", args, {
+      const child = spawnFn("bash", args, {
         cwd: ROOT_DIR,
         env: {
           ...process.env,
           K6_ARRIVAL_RATE: String(rps),
           K6_STEP_DURATION: `${opts.stepDuration}s`,
+          // The runner compares each run with the previous one of the same scenario. Here
+          // that is the previous step, at a different rate: a higher p50 at 40 rps than at
+          // 20 rps is the point of the search, not a regression, but it exits 1 and would
+          // abort the search as "broken script or environment".
+          K6_SKIP_COMPARE: "true",
         },
       });
 
@@ -230,7 +238,14 @@ async function waitBetweenSteps(opts) {
   throw new Error(`Health check ${opts.healthUrl} did not answer 2xx within ${opts.healthTimeout}s`);
 }
 
-module.exports = { evaluateSummary, search, resolveTargets, usesProfileOptions, scenarioSourcePath };
+module.exports = {
+  evaluateSummary,
+  search,
+  createRunStep,
+  resolveTargets,
+  usesProfileOptions,
+  scenarioSourcePath,
+};
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
