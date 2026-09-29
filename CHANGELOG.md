@@ -29,6 +29,7 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 - ⚠️ **BREAKING — `PrometheusClient` removed from `src/metrics/metrics-engine.ts`**. The canonical client is now `src/ai/observability/observability-clients.ts::PrometheusClient`, which returns the unified `ObservabilityResult` schema. The deleted class had no in-tree callers; out-of-tree consumers (none known) must migrate.
 - `run-test.sh` now accepts the `throughput-low|medium|high|ramp` profiles. They were declared in `ProfileName`, `shared/profiles/` and `PROFILES`, but the CLI allowlist rejected them, so they were unreachable.
 - `helpers/data-helper::randomItem` now accepts `readonly T[]` so callers passing `as const` arrays no longer need a cast.
+- **The exported repo passes its own CI on the first push** (`bin/export-client.sh --ci=github|gitlab`). It uses pnpm like the monorepo (`packageManager`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` written by the post-export validation) instead of `npm ci` with no lockfile; the default scenario is one the export contains; inputs reach the shell through `env:`; typecheck fails the job; the profile menu lists only profiles CI can run; k6 is pinned (2.3.0) in a trusted directory; without a `BASE_URL` variable the run targets the bundled mock server (`framework/bin/mock-server.js`, `mock/routes.json`). The standalone runner now runs the target guard (`bin/target-guard.js`); the exported README states it has no RBAC or CLI auth.
 
 ### Deprecated
 - Backward-compat aliases (kept for one minor release, will be removed in v0.4.0):

@@ -37,10 +37,17 @@ The `bin/export-client.sh` script extracts a single client directory from the mo
   `bin/_run-approval.js`, `bin/approve-run.sh`): k6 comes from trusted directories only, and
   a guarded run (gated scenario, heavy profile, env outside `nonProdEnvs`, production load)
   exits `109` until a human approves it. This runner has no gate unlock flags. See
-  [Run Approval and Trusted k6](../security/run-approval.md).
+  [Run Approval and Trusted k6](../security/run-approval.md). It also runs the target guard
+  (`bin/target-guard.js`, see [Target Guard](../security/target-guard.md)).
+- **No RBAC and no CLI auth** in the standalone runner: `check-rbac.js`, `check-cli-auth.js`
+  and `K6_AUTH_TOKEN` stay in the monorepo (they need `ts-node` and `src/core/rbac*`). Anyone
+  who can run the exported script can run any profile the guards above allow; restrict who
+  can push and trigger the workflow. The exported `README.md` says so.
+- The mock server (`framework/bin/mock-server.js`) and `mock/routes.json`, with a `GET
+  /api/<service>` route for each service in `config/default.json`.
 - An update script to pull new framework versions (`bin/update-framework.sh`)
 
-The exported repository works independently — recipients only need `npm install && npm run build` to get started.
+The exported repository works independently — recipients only need `pnpm install && pnpm run build` to get started (`package.json` pins pnpm in `packageManager`; `corepack enable` provides it).
 
 ### Pipeline
 
@@ -49,8 +56,8 @@ The export follows a 5-step pipeline:
 1. **Validate inputs** — client exists, output path is writable, no path traversal
 2. **Copy files** — client files + framework core
 3. **Rewrite imports** — `../../../src/` → `../framework/src/`
-4. **Generate configs** — `package.json`, `tsconfig.json`, `webpack.config.js`, `.eslintrc.json`, `.gitignore`, `README.md`
-5. **Post-export validation** — `npm install` + typecheck (optional)
+4. **Generate configs** — `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `webpack.config.js`, `.eslintrc.json`, `.gitignore`, `README.md`
+5. **Post-export validation** — `pnpm install` (writes `pnpm-lock.yaml`, which `--git-init` commits) + typecheck (optional)
 
 ---
 
@@ -82,7 +89,7 @@ The export follows a 5-step pipeline:
 | Option | Description |
 |--------|-------------|
 | `--force` | Overwrite the output directory if it already exists. |
-| `--skip-validate` | Skip post-export validation (`npm install` + typecheck). Useful for CI or fast exports. |
+| `--skip-validate` | Skip post-export validation (`pnpm install` + typecheck). Useful for CI or fast exports. No `pnpm-lock.yaml` is written: run `pnpm install` and commit it before the first push. |
 | `--git-init` | Initialize a git repository with an initial commit in the output directory. |
 | `--ci <provider>` | Generate a CI/CD workflow. Supported: `github`, `gitlab`, `none` (default). |
 | `--dry-run` | Show what would be exported without creating any files. |
@@ -183,17 +190,25 @@ The rewriting:
 
 Generates `.github/workflows/k6.yml` with:
 - Triggers on push/PR to `main` + manual dispatch with scenario/profile inputs
-- Node.js 20 setup with npm cache
-- k6 installation from official APT repository
-- Build + typecheck + run pipeline
+- Default scenario: one that exists in the export (`scenarios/api/smoke-*` first, then any
+  `api/` scenario, then the first one)
+- Profile menu limited to what CI can run: `smoke`, `quick`, `throughput-low`,
+  `throughput-medium`, `load`, `rampup`. Heavy profiles exit `109` without a human approval.
+- k6 2.3.0 (`grafana/setup-k6-action`) installed in `/usr/local/bin`, a trusted directory
+- pnpm (`pnpm/action-setup`, version from `packageManager`) and Node.js 24;
+  `pnpm install --frozen-lockfile` when `pnpm-lock.yaml` is committed
+- Typecheck (fails the job) + build + run; inputs reach the shell through `env:`, never
+  interpolated into `run:`
+- Without the `BASE_URL` repository variable, the run targets the bundled mock server, so the
+  first push checks the pipeline; set `BASE_URL` to test a real non-production host
 - Report artifact upload (30-day retention)
 
 ### GitLab CI (`--ci=gitlab`)
 
 Generates `.gitlab-ci.yml` with:
-- 4 stages: `validate` → `build` → `test` → `report`
-- k6 installation in `before_script`
-- Build artifacts passed between stages
+- 2 stages: `validate` (typecheck + build) → `test`
+- pnpm through corepack, k6 2.3.0 from the release tarball into `/usr/local/bin`
+- Same default scenario, mock fallback (no `BASE_URL` CI/CD variable) and profile rule as GitHub
 - Report artifacts with 30-day retention
 
 ---
@@ -228,11 +243,12 @@ Exported repositories include `bin/update-framework.sh` to pull newer framework 
 # Update from a local monorepo checkout
 ./bin/update-framework.sh --from=/path/to/k6-enterprise-framework --yes
 
-# Update from a remote git repository
-./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=v1.2.0
+# Update from a remote git repository, pinned to a commit (the repo publishes no tags yet)
+./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=<commit-sha>
 ```
 
 The update script replaces only the `framework/` directory, preserving all client files.
+The runner and its guards in `bin/` stay as exported: re-export to pick up changes there.
 Like the export, it drops the Node-only AI module and its re-export from
 `framework/src/index.ts`; if the repo vendored its own `framework/src/ai`, that directory is
 kept as is.
