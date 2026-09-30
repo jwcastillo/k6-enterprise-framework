@@ -348,6 +348,30 @@ describe("analyze", () => {
     });
 
     it.each([
+      `docker pull grafana/${K}:2.3.0`,
+      `docker images grafana/${K}`,
+      `docker image inspect grafana/${K}:2.3.0`,
+      `docker image ls grafana/${K}`,
+      `docker rmi grafana/${K}:2.3.0`,
+      `podman pull grafana/${K}`,
+      `pacman -Qo /usr/bin/${K}`,
+      `pacman -Ss ${K}`,
+    ])("container and package subcommands that run nothing stay allowed: %s", (cmd) => {
+      expect(analyze(cmd).indirect).toBeNull();
+    });
+
+    it.each([
+      `docker container run grafana/${K} run x.js`,
+      `docker -H pull run grafana/${K} run x.js`,
+      `docker image $X grafana/${K}`,
+      `docker constructor ${K} run x.js`,
+      `docker exec c ${K} run x.js`,
+      `pacman -S ${K}`,
+    ])("container and package subcommands that can run k6 stay refused: %s", (cmd) => {
+      expect(analyze(cmd).indirect).toMatch(/inside the arguments of|variable/);
+    });
+
+    it.each([
       "openssl enc -d -in p.enc -out x.sh -k s && bash x.sh",
       "openssl enc -d -in p.enc -out=x.sh && bash x.sh",
       "printf x | sponge x.sh && bash x.sh",
