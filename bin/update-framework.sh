@@ -74,11 +74,19 @@ WHAT GETS UPDATED:
   framework/src/            <- monorepo/src/ (AI module pruned; an existing
                                framework/src/ai in this repo is kept as is)
   framework/shared/         <- monorepo/shared/profiles/ + shared/schemas/
-  framework/bin/            <- monorepo/bin/validate-config.js + testing/
+  framework/bin/            <- monorepo/bin/validate-config.js + testing/, and the
+                               framework scripts this repo has (generate-report.js,
+                               generate-artifacts.js, _help.js, mock-server.js,
+                               discover-flow.js + discovery/)
+  bin/ guards               <- the ones this repo has: _run-guard.sh, _run-approval.js,
+                               approve-run.sh, _shell-guard.js, validate-generated.js,
+                               _secret-patterns.js, agent-bash-guard.js, scan-skills.sh
+                               (local patches are overwritten; review with git diff bin/)
   framework/VERSION         <- monorepo package.json version
 
 WHAT IS NOT TOUCHED:
   config/  data/  lib/  scenarios/  package.json  tsconfig.json  webpack.config.js
+  bin/run-test.sh (generated)  bin/target-guard.js (often adapted)
 
 EOF
   exit 0
@@ -102,6 +110,23 @@ done
 
 # ── Validate ──────────────────────────────────────────────────────────────────
 FW_DIR="${ROOT_DIR}/framework"
+
+# Framework scripts export-client.sh may place in framework/bin/ and framework-owned
+# guards it places in bin/. Each is refreshed only when this repo already has it.
+# bin/run-test.sh (generated) and bin/target-guard.js (often adapted) are never touched.
+FW_BIN_FILES=(generate-report.js generate-artifacts.js _help.js mock-server.js discover-flow.js)
+GUARD_FILES=(_run-guard.sh _run-approval.js approve-run.sh _shell-guard.js validate-generated.js
+  _secret-patterns.js agent-bash-guard.js scan-skills.sh)
+
+# changed_files <src dir> <dst dir> <file...> — files present in both dirs whose content differs.
+changed_files() {
+  local src="$1" dst="$2" f
+  shift 2
+  for f in "$@"; do
+    [[ -f "${src}/${f}" && -f "${dst}/${f}" ]] && ! cmp -s "${src}/${f}" "${dst}/${f}" && echo "${f}"
+  done
+  return 0
+}
 
 if [[ ! -d "${FW_DIR}" ]]; then
   log_error "No framework/ directory found. This script must be run from a standalone repo root."
@@ -191,11 +216,20 @@ if [[ -d "${MONOREPO_PATH}/shared/schemas" ]]; then
   SCHEMA_CHANGES=$(diff -rq "${FW_DIR}/shared/schemas" "${MONOREPO_PATH}/shared/schemas" 2>/dev/null | wc -l | tr -d ' ' || true)
 fi
 
-TOTAL_CHANGES=$((SRC_CHANGES + PROFILE_CHANGES + SCHEMA_CHANGES))
+FW_BIN_CHANGED=($(changed_files "${MONOREPO_PATH}/bin" "${FW_DIR}/bin" "${FW_BIN_FILES[@]}"))
+if [[ -d "${FW_DIR}/bin/discovery" && -d "${MONOREPO_PATH}/bin/discovery" ]] \
+  && ! diff -rq "${FW_DIR}/bin/discovery" "${MONOREPO_PATH}/bin/discovery" >/dev/null 2>&1; then
+  FW_BIN_CHANGED+=(discovery/)
+fi
+GUARDS_CHANGED=($(changed_files "${MONOREPO_PATH}/bin" "${ROOT_DIR}/bin" "${GUARD_FILES[@]}"))
+
+TOTAL_CHANGES=$((SRC_CHANGES + PROFILE_CHANGES + SCHEMA_CHANGES + ${#FW_BIN_CHANGED[@]} + ${#GUARDS_CHANGED[@]}))
 
 echo -e "  src/:     ${BOLD}${SRC_CHANGES}${RESET} file changes"
 echo -e "  profiles/: ${BOLD}${PROFILE_CHANGES}${RESET} file changes"
 echo -e "  schemas/:  ${BOLD}${SCHEMA_CHANGES}${RESET} file changes"
+echo -e "  framework/bin/: ${BOLD}${#FW_BIN_CHANGED[@]}${RESET} file changes ${FW_BIN_CHANGED[*]:-}"
+echo -e "  bin/ guards:    ${BOLD}${#GUARDS_CHANGED[@]}${RESET} file changes ${GUARDS_CHANGED[*]:-}"
 echo -e "  Total:    ${BOLD}${TOTAL_CHANGES}${RESET} changes"
 echo ""
 
@@ -260,7 +294,25 @@ if [[ -d "${MONOREPO_PATH}/bin/testing" ]]; then
   mkdir -p "${FW_DIR}/bin/testing"
   cp "${MONOREPO_PATH}/bin/testing/"* "${FW_DIR}/bin/testing/" 2>/dev/null || true
 fi
+for f in ${FW_BIN_CHANGED[@]+"${FW_BIN_CHANGED[@]}"}; do
+  if [[ "${f}" == "discovery/" ]]; then
+    rm -rf "${FW_DIR:?}/bin/discovery"
+    cp -R "${MONOREPO_PATH}/bin/discovery" "${FW_DIR}/bin/discovery"
+  else
+    cp "${MONOREPO_PATH}/bin/${f}" "${FW_DIR}/bin/${f}"
+  fi
+done
 log_success "bin/ updated"
+
+# Guards: cp onto the existing file keeps its mode. A local patch shows up in `git diff`.
+if [[ ${#GUARDS_CHANGED[@]} -gt 0 ]]; then
+  log_step "Updating guards in bin/..."
+  for f in "${GUARDS_CHANGED[@]}"; do
+    cp "${MONOREPO_PATH}/bin/${f}" "${ROOT_DIR}/bin/${f}"
+    log_info "bin/${f}"
+  done
+  log_warn "Review the guard changes with git diff bin/ (local patches were overwritten)"
+fi
 
 # Update VERSION
 echo "${NEW_VERSION}" > "${FW_DIR}/VERSION"
