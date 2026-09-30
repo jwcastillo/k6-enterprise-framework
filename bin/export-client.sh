@@ -436,7 +436,7 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo ""
 
   echo -e "  ${BOLD}Files to generate:${RESET}"
-  for f in package.json pnpm-workspace.yaml tsconfig.json webpack.config.js .eslintrc.json .gitignore bin/run-test.sh bin/approve-run.sh bin/target-guard.js framework/bin/mock-server.js mock/routes.json export-manifest.json; do
+  for f in package.json pnpm-workspace.yaml tsconfig.json webpack.config.js eslint.config.js .gitignore bin/run-test.sh bin/approve-run.sh bin/target-guard.js framework/bin/mock-server.js mock/routes.json export-manifest.json; do
     echo -e "    ${f}"
   done
   [[ "${CI_PROVIDER}" == "github" ]] && echo -e "    .github/workflows/k6.yml"
@@ -922,33 +922,47 @@ module.exports = {
 WEBPACK
 log_success "Generated webpack.config.js"
 
-# ── .eslintrc.json ───────────────────────────────────────────────────────────
-cat > "${OUTPUT_DIR}/.eslintrc.json" << 'ESLINT'
-{
-  "root": true,
-  "parser": "@typescript-eslint/parser",
-  "parserOptions": {
-    "ecmaVersion": 2020,
-    "sourceType": "module",
-    "project": "./tsconfig.json"
+# ── eslint.config.js ─────────────────────────────────────────────────────────
+# ESLint 10 reads only flat config; an .eslintrc.json would leave lint unconfigured.
+cat > "${OUTPUT_DIR}/eslint.config.js" << 'ESLINT'
+// ESLint v10 flat config
+const tsParser = require("@typescript-eslint/parser");
+const tsPlugin = require("@typescript-eslint/eslint-plugin");
+
+module.exports = [
+  {
+    files: ["scenarios/**/*.ts", "lib/**/*.ts"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2020,
+        sourceType: "module",
+        project: "./tsconfig.json",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/explicit-function-return-type": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+      "no-console": "off",
+      "no-undef": "off", // TypeScript handles this better
+      "no-unused-vars": "off", // handled by @typescript-eslint/no-unused-vars
+      "no-constant-condition": "warn",
+      "no-debugger": "error",
+    },
   },
-  "plugins": ["@typescript-eslint"],
-  "extends": [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/recommended"
-  ],
-  "rules": {
-    "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/explicit-function-return-type": "warn",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-    "no-console": "off"
+  {
+    ignores: ["node_modules/**", "dist/**", "framework/**", "eslint.config.js"],
   },
-  "env": {
-    "es2020": true
-  }
-}
+];
 ESLINT
-log_success "Generated .eslintrc.json"
+log_success "Generated eslint.config.js"
 
 # ── .gitignore ───────────────────────────────────────────────────────────────
 cat > "${OUTPUT_DIR}/.gitignore" << 'GITIGNORE'
@@ -2520,7 +2534,7 @@ echo ""
 echo -e "  ${BOLD}Structure:${RESET}"
 for item in bin config data docs framework lib scenarios \
             infrastructure mcp-server .claude \
-            .eslintrc.json .gitignore export-manifest.json \
+            eslint.config.js .gitignore export-manifest.json \
             package.json tsconfig.json webpack.config.js; do
   if [[ -e "${OUTPUT_DIR}/${item}" ]]; then
     if [[ -d "${OUTPUT_DIR}/${item}" ]]; then

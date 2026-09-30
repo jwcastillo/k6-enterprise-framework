@@ -212,7 +212,7 @@ for dir in config lib scenarios framework framework/src framework/shared bin; do
 done
 
 # 3.2 Generated files
-for f in package.json tsconfig.json webpack.config.js .eslintrc.json .gitignore export-manifest.json README.md; do
+for f in package.json tsconfig.json webpack.config.js eslint.config.js .gitignore export-manifest.json README.md; do
   if [[ -f "${EXPORT_DIR}/${f}" ]]; then
     assert_pass "generated file: ${f}"
   else
@@ -246,7 +246,7 @@ else
 fi
 
 # 3.5 JSON files are valid
-for json_file in package.json tsconfig.json export-manifest.json .eslintrc.json; do
+for json_file in package.json tsconfig.json export-manifest.json; do
   if node -e "JSON.parse(require('fs').readFileSync('${EXPORT_DIR}/${json_file}','utf8'))" 2>/dev/null; then
     assert_pass "valid JSON: ${json_file}"
   else
@@ -337,6 +337,15 @@ if (cd "${EXPORT_DIR}" && npm install --silent 2>/dev/null); then
     assert_pass "webpack build succeeds"
   else
     assert_fail "webpack build succeeds" "exit=${BUILD_EXIT}"
+  fi
+
+  # 5.1b lint runs with the generated flat config (ESLint 10 ignores .eslintrc.json)
+  LINT_EXIT=0
+  (cd "${EXPORT_DIR}" && npm run lint >/dev/null 2>&1) || LINT_EXIT=$?
+  if [[ "${LINT_EXIT}" -eq 0 ]]; then
+    assert_pass "eslint runs clean"
+  else
+    assert_fail "eslint runs clean" "exit=${LINT_EXIT}"
   fi
 
   # 5.2 dist/ contains compiled files

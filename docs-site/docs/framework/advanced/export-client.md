@@ -56,7 +56,7 @@ The export follows a 5-step pipeline:
 1. **Validate inputs** — client exists, output path is writable, no path traversal
 2. **Copy files** — client files + framework core
 3. **Rewrite imports** — `../../../src/` → `../framework/src/`
-4. **Generate configs** — `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `webpack.config.js`, `.eslintrc.json`, `.gitignore`, `README.md`
+4. **Generate configs** — `package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `webpack.config.js`, `eslint.config.js`, `.gitignore`, `README.md`
 5. **Post-export validation** — `pnpm install` (writes `pnpm-lock.yaml`, which `--git-init` commits) + typecheck (optional)
 
 ---
@@ -138,7 +138,7 @@ Optional flags to include extra tooling in the exported repository. Use `--full`
 ├── package.json           Generated (with build, typecheck, lint scripts)
 ├── tsconfig.json          Generated (with path aliases to framework/)
 ├── webpack.config.js      Generated (auto-discovers scenarios/)
-├── .eslintrc.json         Generated
+├── eslint.config.js       Generated
 ├── .gitignore             Generated
 ├── README.md              Generated (with Quick Start, scenario table, structure)
 └── export-manifest.json   Export metadata (version, date, file counts)
