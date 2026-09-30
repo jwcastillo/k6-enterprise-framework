@@ -6,6 +6,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -76,5 +78,21 @@ describe("bin/validate-config.js (COV-05)", () => {
   it("missing --file argument with no other action exits non-zero", () => {
     const { code } = run([]);
     expect(code).not.toBe(0);
+  });
+
+  // The runner guard reads productionHosts (bin/_run-guard.sh), so a config using it must validate.
+  it("accepts productionHosts and rejects a host with a scheme", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-config-"));
+    const base = JSON.parse(fs.readFileSync(`${FIX}/valid.json`, "utf-8"));
+    try {
+      const ok = path.join(dir, "ok.json");
+      fs.writeFileSync(ok, JSON.stringify({ ...base, productionHosts: ["prod.example.com"] }));
+      expect(run([`--file=${ok}`]).code).toBe(0);
+      const bad = path.join(dir, "bad.json");
+      fs.writeFileSync(bad, JSON.stringify({ ...base, productionHosts: ["https://prod.example.com"] }));
+      expect(run([`--file=${bad}`]).code).toBe(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
