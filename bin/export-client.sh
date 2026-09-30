@@ -2424,7 +2424,7 @@ To update the vendorized framework core:
 ./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=<commit-sha>
 \`\`\`
 
-It refreshes \`framework/\` only. The runner and its guards in \`bin/\` (\`run-test.sh\`, \`_run-guard.sh\`, \`target-guard.js\`) stay as exported; re-export to pick up changes there.
+It refreshes \`framework/\` and the framework-owned guards in \`bin/\` (\`_run-guard.sh\`, \`_shell-guard.js\`, \`validate-generated.js\`, ...; review \`git diff bin/\`). \`bin/run-test.sh\` and \`bin/target-guard.js\` stay as exported; re-export to pick up changes there.
 
 ---
 *Exported on $(date -u +"%Y-%m-%d") from k6-enterprise-framework v${FRAMEWORK_VERSION}*

@@ -233,7 +233,13 @@ Los repositorios exportados incluyen `bin/update-framework.sh` para traer versio
 ./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=v1.2.0
 ```
 
-El script de actualizacion reemplaza solo el directorio `framework/`, preservando todos los archivos del cliente.
+El script de actualizacion reemplaza el directorio `framework/`, preservando todos los archivos del cliente.
+Tambien actualiza los guards del framework que el repo ya tenga en `bin/` (`_run-guard.sh`,
+`_run-approval.js`, `approve-run.sh`, `_shell-guard.js`, `validate-generated.js`,
+`_secret-patterns.js`, `agent-bash-guard.js`, `scan-skills.sh`); los parches locales en esos
+archivos se pisan, asi que revisa `git diff bin/`. `bin/run-test.sh` (generado) y
+`bin/target-guard.js` (que se suele adaptar) quedan como se exportaron: re-exporta para tomar
+cambios ahi.
 Igual que el export, quita el modulo de IA (solo Node) y su re-export de
 `framework/src/index.ts`; si el repo vendorizo su propio `framework/src/ai`, ese directorio se
 conserva tal cual.

@@ -247,8 +247,12 @@ Exported repositories include `bin/update-framework.sh` to pull newer framework 
 ./bin/update-framework.sh --from=github:org/k6-enterprise-framework --ref=<commit-sha>
 ```
 
-The update script replaces only the `framework/` directory, preserving all client files.
-The runner and its guards in `bin/` stay as exported: re-export to pick up changes there.
+The update script replaces the `framework/` directory, preserving all client files. It also
+refreshes the framework-owned guards the repo already has in `bin/` (`_run-guard.sh`,
+`_run-approval.js`, `approve-run.sh`, `_shell-guard.js`, `validate-generated.js`,
+`_secret-patterns.js`, `agent-bash-guard.js`, `scan-skills.sh`); local patches to them are
+overwritten, so review `git diff bin/`. `bin/run-test.sh` (generated) and `bin/target-guard.js`
+(often adapted) stay as exported: re-export to pick up changes there.
 Like the export, it drops the Node-only AI module and its re-export from
 `framework/src/index.ts`; if the repo vendored its own `framework/src/ai`, that directory is
 kept as is.
