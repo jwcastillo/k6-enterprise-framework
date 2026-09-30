@@ -50,7 +50,7 @@ La exportacion sigue un pipeline de 5 pasos:
 1. **Validar inputs** — el cliente existe, el path de salida es valido, no hay path traversal
 2. **Copiar archivos** — archivos del cliente + framework core
 3. **Reescribir imports** — `../../../src/` → `../framework/src/`
-4. **Generar configs** — `package.json`, `tsconfig.json`, `webpack.config.js`, `.eslintrc.json`, `.gitignore`, `README.md`
+4. **Generar configs** — `package.json`, `tsconfig.json`, `webpack.config.js`, `eslint.config.js`, `.gitignore`, `README.md`
 5. **Validacion post-export** — `npm install` + typecheck (opcional)
 
 ---
@@ -132,7 +132,7 @@ Flags opcionales para incluir herramientas extra en el repositorio exportado. Us
 ├── package.json           Generado (con scripts build, typecheck, lint)
 ├── tsconfig.json          Generado (con path aliases a framework/)
 ├── webpack.config.js      Generado (auto-descubre scenarios/)
-├── .eslintrc.json         Generado
+├── eslint.config.js       Generado
 ├── .gitignore             Generado
 ├── README.md              Generado (con Quick Start, tabla de escenarios, estructura)
 └── export-manifest.json   Metadata del export (version, fecha, conteo de archivos)
