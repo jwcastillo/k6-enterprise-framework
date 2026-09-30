@@ -223,6 +223,20 @@ if [[ -d "${FW_DIR}/bin/discovery" && -d "${MONOREPO_PATH}/bin/discovery" ]] \
 fi
 GUARDS_CHANGED=($(changed_files "${MONOREPO_PATH}/bin" "${ROOT_DIR}/bin" "${GUARD_FILES[@]}"))
 
+# generate-artifacts.js v2 is a thin wrapper that loads src/reporting/artifacts through a
+# compiled framework/dist or tsx/ts-node. A repo with neither would get a report step that
+# dies with "Cannot find module 'tsx/cjs'", so it keeps the script it has and gets a warning.
+ARTIFACTS_HELD=false
+if grep -q 'src/reporting/artifacts' "${MONOREPO_PATH}/bin/generate-artifacts.js" 2>/dev/null \
+  && [[ ! -d "${FW_DIR}/dist/src/reporting/artifacts" ]] \
+  && ! grep -Eq '"(tsx|ts-node)"[[:space:]]*:' "${ROOT_DIR}/package.json" 2>/dev/null; then
+  KEPT=()
+  for f in ${FW_BIN_CHANGED[@]+"${FW_BIN_CHANGED[@]}"}; do
+    if [[ "${f}" == "generate-artifacts.js" ]]; then ARTIFACTS_HELD=true; else KEPT+=("${f}"); fi
+  done
+  FW_BIN_CHANGED=(${KEPT[@]+"${KEPT[@]}"})
+fi
+
 TOTAL_CHANGES=$((SRC_CHANGES + PROFILE_CHANGES + SCHEMA_CHANGES + ${#FW_BIN_CHANGED[@]} + ${#GUARDS_CHANGED[@]}))
 
 echo -e "  src/:     ${BOLD}${SRC_CHANGES}${RESET} file changes"
@@ -232,6 +246,9 @@ echo -e "  framework/bin/: ${BOLD}${#FW_BIN_CHANGED[@]}${RESET} file changes ${F
 echo -e "  bin/ guards:    ${BOLD}${#GUARDS_CHANGED[@]}${RESET} file changes ${GUARDS_CHANGED[*]:-}"
 echo -e "  Total:    ${BOLD}${TOTAL_CHANGES}${RESET} changes"
 echo ""
+if [[ "${ARTIFACTS_HELD}" == "true" ]]; then
+  log_warn "framework/bin/generate-artifacts.js kept as is: the new one needs tsx/ts-node in package.json or a compiled framework/dist"
+fi
 
 if [[ "${TOTAL_CHANGES}" -eq 0 ]]; then
   log_success "Framework is already up to date"

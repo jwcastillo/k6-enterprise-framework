@@ -118,4 +118,26 @@ describe("update-framework.sh", () => {
     expect(read("framework/src/ai/index.ts")).toBe("export const locallyPatched = true;\n");
     expect(read("framework/src/index.ts")).not.toMatch(/ai\/index/);
   });
+
+  it("keeps generate-artifacts.js when the new wrapper needs a TS loader the repo lacks", () => {
+    write(path.join(mono, "bin/generate-artifacts.js"), '// v2\nrequire("../src/reporting/artifacts");\n');
+    write(path.join(standalone, "framework/bin/generate-artifacts.js"), "// artifacts v1 monolith\n");
+    write(path.join(standalone, "package.json"), JSON.stringify({ devDependencies: { typescript: "^5" } }));
+
+    const res = update();
+    expect(res.status).toBe(0);
+    expect(res.stdout).toMatch(/generate-artifacts\.js kept as is/);
+    expect(read("framework/bin/generate-artifacts.js")).toBe("// artifacts v1 monolith\n");
+  });
+
+  it("refreshes the generate-artifacts.js wrapper when the repo ships tsx", () => {
+    write(path.join(mono, "bin/generate-artifacts.js"), '// v2\nrequire("../src/reporting/artifacts");\n');
+    write(path.join(standalone, "framework/bin/generate-artifacts.js"), "// artifacts v1 monolith\n");
+    write(path.join(standalone, "package.json"), JSON.stringify({ devDependencies: { tsx: "^4" } }));
+
+    const res = update();
+    expect(res.status).toBe(0);
+    expect(res.stdout).not.toMatch(/kept as is/);
+    expect(read("framework/bin/generate-artifacts.js")).toContain("src/reporting/artifacts");
+  });
 });
