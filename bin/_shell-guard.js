@@ -835,6 +835,23 @@ const DATA_TOOLS = new Set([
   "local", "readonly", "typeset", "alias", "unset", "tee", "column", "fold", "nl", "comm", "join", "paste", "od", "xxd",
 ]);
 
+// Container CLIs and package managers whose subcommand only looks at images, containers
+// or packages: `docker pull grafana/k6`, `pacman -Qo /usr/bin/k6` run nothing. The
+// subcommand must be the first argument (a global flag could hide the real one).
+const CONTAINER_CLIS = new Set(["docker", "podman", "nerdctl"]);
+const CONTAINER_DATA_CMDS = new Set(["pull", "push", "images", "inspect", "ps", "rmi", "tag", "history", "logs", "version", "info", "search", "stop", "kill", "rm"]);
+const CONTAINER_DATA_SUBCMDS = new Map([
+  ["image", new Set(["ls", "list", "inspect", "rm", "remove", "pull", "push", "prune", "history", "tag"])],
+  ["container", new Set(["ls", "list", "inspect", "logs", "rm", "remove", "stop", "kill"])],
+]);
+const PKG_QUERY_RE = /^(-Q\w*|-F\w*|-S[si]+|--query|--files)$/;
+function nonExecuting(name, args) {
+  const [a, b] = args.map((w) => (w.dynamic ? null : w.text));
+  if (CONTAINER_CLIS.has(name)) return CONTAINER_DATA_CMDS.has(a) || Boolean(CONTAINER_DATA_SUBCMDS.get(a)?.has(b));
+  if (name === "pacman" || name === "yay" || name === "paru") return a != null && PKG_QUERY_RE.test(a);
+  return false;
+}
+
 // Variables that make a shell or git run another program.
 const EXEC_ENV_RE = /^(BASH_ENV|ENV|LD_PRELOAD|LD_LIBRARY_PATH|PROMPT_COMMAND|PAGER|EDITOR|VISUAL|GIT_(PAGER|EDITOR|SEQUENCE_EDITOR|SSH|SSH_COMMAND|EXTERNAL_DIFF|ASKPASS|CONFIG_.*))$/;
 const GIT_EXEC_KEY_RE = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass)|alias\.|sequence\.editor|diff\.external|credential\.helper|gpg\.program|pager\.|.*\.(textconv|command|cmd|process|clean|smudge))/i;
@@ -909,7 +926,7 @@ function analyze(command, opts = {}) {
     }
     const name = base(head);
     if (head.text !== "[" && head.text !== "[[" && /[[\]?*{}]/.test(head.text)) flag("a command name with glob or brace characters");
-    const launcher = !DATA_TOOLS.has(name) && name !== "helm" && !isK6(head) && !isRunner(head) && !/^x?k6\s/.test(head.text);
+    const launcher = !DATA_TOOLS.has(name) && name !== "helm" && !isK6(head) && !isRunner(head) && !/^x?k6\s/.test(head.text) && !nonExecuting(name, args);
     // kubectl: resource and release names like "k6" are data; the container command
     // (after --) and --image are not.
     const scanned = name === "kubectl" ? [...args.slice(args.findIndex((a) => a.text === "--") + 1 || args.length), ...args.filter((a) => a.text.startsWith("--image"))] : args;
