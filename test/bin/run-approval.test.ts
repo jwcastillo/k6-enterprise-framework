@@ -171,11 +171,20 @@ describe("run-test.sh — human approval for guarded runs", () => {
 
   it("treats a productionHosts host in the bundle or an env var as guarded, whatever --env says", () => {
     const cfgPath = path.join(clientDir, "config", "default.json");
-    const bundle = path.join(ROOT, "dist", clientName.replace(/^_/, ""), "api", "approval-probe.js");
+    const bundle = path.join(
+      ROOT,
+      "dist",
+      clientName.replace(/^_/, ""),
+      "api",
+      "approval-probe.js"
+    );
     const cfg = fs.readFileSync(cfgPath, "utf8");
     const js = fs.readFileSync(bundle, "utf8");
     try {
-      fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfg), productionHosts: ["prod.example.com"] }));
+      fs.writeFileSync(
+        cfgPath,
+        JSON.stringify({ ...JSON.parse(cfg), productionHosts: ["prod.example.com"] })
+      );
       const clean = runner(["--profile=smoke"]);
       expect(clean.status, out(clean)).toBe(0);
       const viaEnv = runner(["--profile=smoke"], { WEB_BASE_URL: "https://PROD.example.com/x" });
