@@ -1,0 +1,19 @@
+{
+  "info": {"name": "Shop", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "variable": [{"key": "baseUrl", "value": "https://api.example.com"}, {"key": "user", "value": "demo"}, {"key": "password", "value": "pa\"ss\\word"}],
+  "item": [
+    {"name": "Catalog", "item": [{"name": "List", "request": {"method": "GET", "url": "{{baseUrl}}/v1/products?page=1"},
+      "event": [{"listen": "test", "script": {"exec": ["pm.response.to.have.status(200);"]}}]}]},
+    {"name": "Cart", "item": [{"name": "List", "request": {"method": "GET", "url": "{{baseUrl}}/v1/cart",
+      "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{token}}"}]}}}]},
+    {"name": "Login", "request": {"method": "POST", "url": "{{baseUrl}}/v1/login",
+      "body": {"mode": "raw", "raw": "{\"user\": \"{{user}}\", \"password\": \"{{password}}\"}", "options": {"raw": {"language": "json"}}}},
+     "event": [{"listen": "test", "script": {"exec": ["var jsonData = pm.response.json();", "pm.environment.set(\"token\", jsonData.session.token);", "pm.response.to.have.status(200);"]}},
+               {"listen": "prerequest", "script": {"exec": ["console.log('hola')"]}}]},
+    {"name": "Add to cart", "request": {"method": "POST", "url": "{{baseUrl}}/v1/cart/items",
+      "header": [{"key": "Authorization", "value": "Bearer {{token}}"}, {"key": "X-Off", "value": "1", "disabled": true}],
+      "body": {"mode": "raw", "raw": "{\"sku\": \"A-1\", \"qty\": 2}"}},
+     "event": [{"listen": "test", "script": {"exec": ["pm.expect(pm.response.code).to.eql(201);", "pm.test('custom', () => { pm.expect(1).to.equal(1); });"]}}]},
+    {"name": "Upload", "request": {"method": "POST", "url": "{{baseUrl}}/v1/files", "auth": {"type": "oauth2"}, "body": {"mode": "formdata", "formdata": []}}}
+  ]
+}
