@@ -1,0 +1,27 @@
+meta {
+  name: Login
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v1/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "user": "{{user}}",
+    "password": "{{password}}"
+  }
+}
+
+vars:post-response {
+  token: res.body.session.token
+  ~disabled: res.body.x
+}
+
+assert {
+  res.status: eq 200
+}
