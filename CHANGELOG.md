@@ -8,6 +8,7 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 ## [Unreleased]
 
 ### Fixed
+- **Scenario gate hook and symlinked paths** (`.claude/hooks/guardrails.js`) — `post-scenario` now compares real paths. A scenario edited through a symlinked path (e.g. `/var` → `/private/var` on macOS) was treated as outside the repo and skipped the generation gate. Also fixes `export-client-claude.test.ts` on macOS.
 - **Generation gate and `buildOptions()`** (`bin/validate-generated.js`) — without k6 (`--no-build`, the editor hook, CI jobs without the binary) the text check failed every scenario whose options come from `buildOptions(...)` with "options must declare thresholds", even though every shared profile declares thresholds. It now warns, as it does for options imported from another module; the full gate still checks them resolved with `k6 inspect`.
 
 ### Added
