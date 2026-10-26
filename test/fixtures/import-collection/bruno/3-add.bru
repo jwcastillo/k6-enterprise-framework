@@ -1,0 +1,26 @@
+meta {
+  name: Add to cart
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/cart/items
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "sku": "A-1",
+    "qty": 2
+  }
+}
+
+assert {
+  res.status: eq 201
+}

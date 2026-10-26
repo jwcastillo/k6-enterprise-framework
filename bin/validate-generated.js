@@ -347,11 +347,13 @@ async function validateScenario(file, ctx) {
   checks.push(...hostChecks(urls, allowedHostsOf(ctx.config), file));
   checks.push(...secretChecks(text, file));
 
-  // Options defined in another module (`export { options } from`, `export const options = shared;`)
-  // are invisible to this text check; k6 inspect sees them resolved (full gate only).
+  // Options defined in another module (`export { options } from`, `export const options = shared;`) or built by
+  // the framework's buildOptions() (every shared profile declares thresholds) are invisible to this text check;
+  // k6 inspect sees them resolved (full gate only).
   const importedOptions =
     /export\s*\{[^}]*\boptions\b[^}]*\}\s*from/.test(text) ||
-    /export\s+const\s+options\s*(?::[^=]+)?=\s*[A-Za-z_$][\w$.]*\s*;/.test(text);
+    /export\s+const\s+options\s*(?::[^=]+)?=\s*[A-Za-z_$][\w$.]*\s*;/.test(text) ||
+    /export\s+const\s+options\s*(?::[^=]+)?=\s*buildOptions\s*\(/.test(text);
   checks.push(
     /\bthresholds\s*:/.test(text)
       ? check("thresholds", "pass", "thresholds declared", { file })

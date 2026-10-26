@@ -128,6 +128,14 @@ clients/<your-client>/
 └── lib/         # Client-specific services & helpers
 ```
 
+Already have the requests in Postman, Bruno or curl? Import them into the client (service class, one `api/` scenario per request and a `flow/` scenario that chains extracted values); the result goes through the generation gate, and a smoke must pass before any load:
+
+```bash
+node bin/import-collection.js --from=collections/shop.postman_collection.json --client=<name>
+node bin/import-collection.js --from=collections/shop-bruno --bruno-env=staging --client=<name> --dry-run
+node bin/import-collection.js --from=collections/shop.curl.sh --client=<name> --name=checkout
+```
+
 Scaffold one from the reference client, or export an existing client as a standalone repo:
 
 ```bash

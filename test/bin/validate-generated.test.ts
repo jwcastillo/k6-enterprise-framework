@@ -80,7 +80,7 @@ describe("validate-generated --kind=scenario", () => {
 describe("validate-generated --kind=scenario, options from another module", () => {
   const cfg = `--config=${FX}/config.json`;
 
-  it.each(["reexport", "helper-options"])("--no-build warns (not fails) on thresholds for %s", (name) => {
+  it.each(["reexport", "helper-options", "build-options"])("--no-build warns (not fails) on thresholds for %s", (name) => {
     const { status, result } = gate(["--kind=scenario", "--no-build", cfg, `${FX}/scenarios/api/${name}.ts`]);
     expect(statusOf(result, "thresholds")).toEqual(["warn"]);
     expect(status).toBe(0);
