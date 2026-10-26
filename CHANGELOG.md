@@ -7,6 +7,9 @@ and this project adheres to [Conventional Commits](https://www.conventionalcommi
 
 ## [Unreleased]
 
+### Fixed
+- **Scenario gate hook and symlinked paths** (`.claude/hooks/guardrails.js`) — `post-scenario` now compares real paths. A scenario edited through a symlinked path (e.g. `/var` → `/private/var` on macOS) was treated as outside the repo and skipped the generation gate. Also fixes `export-client-claude.test.ts` on macOS.
+
 ### Added
 - **Human approval for guarded runs** (`bin/approve-run.sh`, `bin/_run-guard.sh`, `bin/_run-approval.js`) — `run-test.sh`, `run-distributed.sh` and the exported standalone runner refuse a heavy profile, an env outside `nonProdEnvs`, an unlocked/gated scenario or production load with the new exit code `109` until a human creates a single-use, HMAC-signed approval in an interactive terminal. k6 is resolved from trusted directories only (`trustedBinDirs` in the client config), never through the caller's `PATH`, and runs without `NODE_OPTIONS`/`BASH_ENV`/`ENV`/`LD_PRELOAD`. **Breaking:** the runners no longer read `K6_BINARY_ALLOWED_PATHS`.
 - **Agents cannot run approvals** — the repo hook (`.claude/hooks/guardrails.js`), the shared shell parser (`bin/_shell-guard.js`) and every agent-team guard profile (`bin/agent-bash-guard.js`) deny running `bin/approve-run.sh` / `bin/_run-approval.js` in any form (direct, shells, `source`, `node`, `script`/`expect`/`unbuffer` pty wrappers, `find -exec`, interpreter code). Standalone exports with `--with-claude` get the same rule.

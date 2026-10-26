@@ -4,6 +4,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -144,6 +146,23 @@ describe("checkScenario (PostToolUse)", () => {
       stdout: JSON.stringify({ checks: [{ id: "thresholds", status: "fail", message: "options must declare thresholds" }] }),
     });
     expect(checkScenario("clients/acme/scenarios/api/x.ts", fake)).toMatch(/thresholds: options must declare thresholds/);
+  });
+
+  it("still gates a scenario reached through a symlinked path (e.g. /var → /private/var on macOS)", () => {
+    const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "hook-link-")), "repo");
+    fs.symlinkSync(ROOT, link);
+    const calls: string[][] = [];
+    const fake = (_bin: string, args: string[]) => {
+      calls.push(args);
+      return { status: 1, stdout: JSON.stringify({ checks: [{ id: "thresholds", status: "fail", message: "options must declare thresholds" }] }) };
+    };
+    try {
+      // the file does not exist yet: the closest existing ancestor (the link) is resolved
+      expect(checkScenario(path.join(link, "clients/acme/scenarios/api/x.ts"), fake)).toMatch(/thresholds/);
+      expect(calls[0]).toContain("clients/acme/scenarios/api/x.ts");
+    } finally {
+      fs.rmSync(path.dirname(link), { recursive: true, force: true });
+    }
   });
 
   it("fails open when the gate itself errors", () => {

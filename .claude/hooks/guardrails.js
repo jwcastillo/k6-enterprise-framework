@@ -12,6 +12,7 @@
 
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
@@ -79,8 +80,20 @@ function checkWrite(filePath, ignored = isGitIgnored) {
 
 const SCENARIO_RE = /(^|\/)(clients\/([^/]+)\/)?scenarios\/.+\.ts$/;
 
+/** Real path of p, or of its closest existing ancestor plus the rest (the file may not exist yet). */
+function realPath(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    const parent = path.dirname(p);
+    return parent === p ? p : path.join(realPath(parent), path.basename(p));
+  }
+}
+
 function checkScenario(filePath, run = spawnSync) {
-  const rel = path.relative(ROOT, path.resolve(ROOT, String(filePath || ""))).split(path.sep).join("/");
+  // ROOT is a real path (__dirname); a file reached through a symlink (/var → /private/var on macOS) must not
+  // look like it is outside the repo, or the gate is skipped.
+  const rel = path.relative(realPath(ROOT), realPath(path.resolve(ROOT, String(filePath || "")))).split(path.sep).join("/");
   const m = SCENARIO_RE.exec(rel);
   if (!m || rel.startsWith("..") || rel.startsWith("test/")) return null;
   const args = [path.join(ROOT, "bin/validate-generated.js"), "--kind=scenario", "--no-build", "--format=json", rel];
